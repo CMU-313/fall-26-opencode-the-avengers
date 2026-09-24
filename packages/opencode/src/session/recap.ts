@@ -34,8 +34,8 @@ export const Result = Schema.Struct({
   carriedOver: Schema.Array(Schema.String),
   nextSteps: Schema.Array(Schema.String),
   hadPlan: Schema.Boolean,
-  generatedAt: Schema.Number, // when we made this recap
-  sourceUpdatedAt: Schema.Number, // the session's "last updated" time when we made it
+  generatedAt: Schema.Finite, // when we made this recap
+  sourceUpdatedAt: Schema.Finite, // the session's "last updated" time when we made it
 }).annotate({ identifier: "SessionRecap" })
 export type Result = Schema.Schema.Type<typeof Result>
 
