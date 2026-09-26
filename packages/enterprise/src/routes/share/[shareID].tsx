@@ -24,6 +24,7 @@ import { Meta, Title } from "@solidjs/meta"
 import { Base64 } from "js-base64"
 import { getRequestEvent } from "solid-js/web"
 
+
 const ClientOnlyWorkerPoolProvider = clientOnly(() =>
   import("@opencode-ai/session-ui/pierre/worker").then((m) => ({
     default: (props: { children: any }) => (
