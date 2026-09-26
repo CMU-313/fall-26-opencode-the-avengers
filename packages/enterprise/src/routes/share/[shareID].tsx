@@ -156,7 +156,8 @@ export default function () {
   let interval: ReturnType<typeof setInterval>
 
   onMount(async () => {
-    if (!params.shareID) return
+    const shareID = params.shareID
+    if (!shareID) return
 
     viewerID = localStorage.getItem("viewer-id") ?? crypto.randomUUID()
     localStorage.setItem("viewer-id", viewerID)
@@ -166,21 +167,21 @@ export default function () {
       name: "Viewer",
     }
 
-    await addViewer(params.shareID, viewer)
+    await addViewer(shareID, viewer)
 
     const refreshViewers = async () => {
-      const current = await getViewers(params.shareID)
+      const current = await getViewers(shareID)
       setViewers(current)
     }
 
     await refreshViewers()
 
     interval = setInterval(refreshViewers, 2000)
-  
-    const removeCurrentViewer = () => {
-      if (!params.shareID || !viewerID) return
 
-      void fetch(`/api/share/${params.shareID}/viewer/${viewerID}`, {
+    const removeCurrentViewer = () => {
+      if (!viewerID) return
+
+      void fetch(`/api/share/${shareID}/viewer/${viewerID}`, {
         method: "DELETE",
         keepalive: true,
       })
