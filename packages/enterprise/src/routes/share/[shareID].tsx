@@ -329,6 +329,11 @@ export default function () {
                               </a>
                             </div>
                             <div class="flex gap-3 items-center">
+
+                              <div class="text-12-regular text-text-weaker">
+                                Currently viewing: {viewers().length}
+                              </div>           
+                                                 
                               <IconButton
                                 as={"a"}
                                 href="https://github.com/anomalyco/opencode"
