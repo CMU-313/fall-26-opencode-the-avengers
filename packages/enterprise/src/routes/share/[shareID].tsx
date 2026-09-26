@@ -176,6 +176,21 @@ export default function () {
     await refreshViewers()
 
     interval = setInterval(refreshViewers, 2000)
+  
+    const removeCurrentViewer = () => {
+      if (!params.shareID || !viewerID) return
+
+      void fetch(`/api/share/${params.shareID}/viewer/${viewerID}`, {
+        method: "DELETE",
+        keepalive: true,
+      })
+    }
+
+    window.addEventListener("pagehide", removeCurrentViewer)
+
+    onCleanup(() => {
+      window.removeEventListener("pagehide", removeCurrentViewer)
+    })
   })
 
   onCleanup(() => {

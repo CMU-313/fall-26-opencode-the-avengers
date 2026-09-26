@@ -115,6 +115,21 @@ app
     },
   )
   .delete(
+    "/share/:shareID/viewer/:viewerID",
+    validator(
+      "param",
+      z.object({
+        shareID: z.string(),
+        viewerID: z.string(),
+      }),
+    ),
+    async (c) => {
+      const { shareID, viewerID } = c.req.valid("param")
+      await Share.removeViewer(shareID, viewerID)
+      return c.json({})
+    },
+  )
+  .delete(
     "/share/:shareID",
     describeRoute({
       description: "Remove a share",
