@@ -5,7 +5,7 @@ import { DataProvider } from "@opencode-ai/session-ui/context"
 import { FileComponentProvider } from "@opencode-ai/ui/context/file"
 import { WorkerPoolProvider } from "@opencode-ai/ui/context/worker-pool"
 import { createAsync, query, useParams } from "@solidjs/router"
-import { createMemo, createSignal, ErrorBoundary, For, Match, Show, Switch } from "solid-js"
+import { createEffect, createMemo, createSignal, ErrorBoundary, For, Match, onCleanup, Show, Switch } from "solid-js"
 import { Share } from "~/core/share"
 import { Logo, Mark } from "@opencode-ai/ui/logo"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -121,6 +121,26 @@ const getData = query(async (shareID) => {
   if (!match.found) throw new SessionDataMissingError({ sessionID: share.sessionID })
   return result
 }, "getShareData")
+
+
+const addViewer = query(async (shareID: string, viewer: Share.Viewer) => {
+  "use server"
+
+  await Share.addViewer(shareID, viewer)
+}, "addShareViewer")
+
+const getViewers = query(async (shareID: string) => {
+  "use server"
+
+  return Share.viewers(shareID)
+}, "getShareViewers")
+
+const removeViewer = query(async (shareID: string, viewerID: string) => {
+  "use server"
+
+  await Share.removeViewer(shareID, viewerID)
+}, "removeShareViewer")
+
 
 export default function () {
   getRequestEvent()?.response.headers.set(
