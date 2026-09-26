@@ -5,7 +5,7 @@ import { DataProvider } from "@opencode-ai/session-ui/context"
 import { FileComponentProvider } from "@opencode-ai/ui/context/file"
 import { WorkerPoolProvider } from "@opencode-ai/ui/context/worker-pool"
 import { createAsync, query, useParams } from "@solidjs/router"
-import { createEffect, createMemo, createSignal, ErrorBoundary, For, Match, onCleanup, Show, Switch } from "solid-js"
+import { createEffect, createMemo, createSignal, ErrorBoundary, For, Match, onCleanup, onMount, Show, Switch } from "solid-js"
 import { Share } from "~/core/share"
 import { Logo, Mark } from "@opencode-ai/ui/logo"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -153,8 +153,9 @@ export default function () {
   const [viewers, setViewers] = createSignal<Share.Viewer[]>([])
 
   let viewerID = ""
+  let interval: ReturnType<typeof setInterval>
 
-  createEffect(async () => {
+  onMount(async () => {
     if (!params.shareID) return
 
     viewerID = localStorage.getItem("viewer-id") ?? crypto.randomUUID()
@@ -167,14 +168,22 @@ export default function () {
 
     await addViewer(params.shareID, viewer)
 
-    const current = await getViewers(params.shareID)
-    setViewers(current)
+    const refreshViewers = async () => {
+      const current = await getViewers(params.shareID)
+      setViewers(current)
+    }
+
+    await refreshViewers()
+
+    interval = setInterval(refreshViewers, 2000)
   })
 
   onCleanup(() => {
+    clearInterval(interval)
+
     if (!params.shareID || !viewerID) return
 
-    removeViewer(params.shareID, viewerID)
+    void removeViewer(params.shareID, viewerID)
   })
 
 
