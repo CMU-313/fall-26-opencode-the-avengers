@@ -149,6 +149,35 @@ export default function () {
   )
 
   const params = useParams()
+
+  const [viewers, setViewers] = createSignal<Share.Viewer[]>([])
+
+  let viewerID = ""
+
+  createEffect(async () => {
+    if (!params.shareID) return
+
+    viewerID = localStorage.getItem("viewer-id") ?? crypto.randomUUID()
+    localStorage.setItem("viewer-id", viewerID)
+
+    const viewer = {
+      id: viewerID,
+      name: "Viewer",
+    }
+
+    await addViewer(params.shareID, viewer)
+
+    const current = await getViewers(params.shareID)
+    setViewers(current)
+  })
+
+  onCleanup(() => {
+    if (!params.shareID || !viewerID) return
+
+    removeViewer(params.shareID, viewerID)
+  })
+
+
   const data = createAsync(async () => {
     if (!params.shareID) throw new Error("Missing shareID")
     return getData(params.shareID)
