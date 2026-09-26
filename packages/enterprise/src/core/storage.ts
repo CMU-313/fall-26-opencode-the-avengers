@@ -63,6 +63,30 @@ export namespace Storage {
     }
   }
 
+  function memory(): Adapter {
+    const data = new Map<string, string>()
+
+    return {
+      async read(path) {
+        return data.get(path)
+      },
+
+      async write(path, value) {
+        data.set(path, value)
+      },
+
+      async remove(path) {
+        data.delete(path)
+      },
+
+      async list(options) {
+        return [...data.keys()].filter((key) =>
+          key.startsWith(options?.prefix ?? ""),
+        )
+      },
+    }
+  }
+
   function s3(): Adapter {
     const bucket = process.env.OPENCODE_STORAGE_BUCKET!
     const region = process.env.OPENCODE_STORAGE_REGION || "us-east-1"
@@ -85,6 +109,7 @@ export namespace Storage {
 
   const adapter = lazy(() => {
     const type = process.env.OPENCODE_STORAGE_ADAPTER
+    if (type === "memory") return memory()
     if (type === "r2") return r2()
     if (type === "s3") return s3()
     throw new Error("No storage adapter configured")
