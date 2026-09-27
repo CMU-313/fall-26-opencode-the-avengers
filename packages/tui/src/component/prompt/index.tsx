@@ -1036,6 +1036,19 @@ export function Prompt(props: PromptProps) {
     // Filter out text parts (pasted content) since they're now expanded inline
     const nonTextParts = store.prompt.parts.filter((part) => part.type !== "text")
 
+    const copyCommand = inputText.match(/^\/copy(?:\s+([0-9]+))?\s*$/)
+    if (store.mode !== "shell" && copyCommand) {
+      const count = copyCommand[1] === undefined ? undefined : Number(copyCommand[1])
+      if (count !== undefined && (!Number.isSafeInteger(count) || count < 1)) {
+        toast.show({ message: "Must copy a positive number of messages.", variant: "error" })
+        return true
+      }
+      move.startSubmit()
+      keymap.dispatchCommand("session.copy", { payload: count })
+      clearPrompt()
+      return true
+    }
+
     // Capture mode before it gets reset
     const currentMode = store.mode
     const editorSelection = editorContext()
