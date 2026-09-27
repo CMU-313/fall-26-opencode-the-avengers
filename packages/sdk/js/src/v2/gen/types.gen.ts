@@ -2547,6 +2547,15 @@ export type NotFoundError = {
   }
 }
 
+export type SessionRecap = {
+  completed: Array<string>
+  carriedOver: Array<string>
+  nextSteps: Array<string>
+  hadPlan: boolean
+  generatedAt: number
+  sourceUpdatedAt: number
+}
+
 export type TextPartInput = {
   id?: string
   type: "text"
@@ -9720,6 +9729,41 @@ export type SessionTodoResponses = {
 }
 
 export type SessionTodoResponse = SessionTodoResponses[keyof SessionTodoResponses]
+
+export type SessionRecapData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+    cached?: "true" | "false"
+  }
+  url: "/session/{sessionID}/recap"
+}
+
+export type SessionRecapErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+}
+
+export type SessionRecapError = SessionRecapErrors[keyof SessionRecapErrors]
+
+export type SessionRecapResponses = {
+  /**
+   * Session recap
+   */
+  200: SessionRecap
+}
+
+export type SessionRecapResponse = SessionRecapResponses[keyof SessionRecapResponses]
 
 export type SessionDiffData = {
   body?: never

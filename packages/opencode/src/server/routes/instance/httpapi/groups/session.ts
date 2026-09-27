@@ -2,6 +2,8 @@ import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { Permission } from "@/permission"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 
+import { SessionRecap } from "@/session/recap"
+// added session recap so that it can be used in the session HTTP API
 import { Session } from "@/session/session"
 import { MessageV2 } from "@/session/message-v2"
 import { SessionPrompt } from "@/session/prompt"
@@ -40,6 +42,13 @@ export const DiffQuery = Schema.Struct({
   ...WorkspaceRoutingQueryFields,
   ...Struct.omit(SessionSummary.DiffInput.fields, ["sessionID"]),
 })
+
+// added recap query for session HTTP API
+export const RecapQuery = Schema.Struct({
+  ...WorkspaceRoutingQueryFields,
+  cached: Schema.optional(QueryBoolean),
+})
+
 export const MessagesQuery = Schema.Struct({
   ...WorkspaceRoutingQueryFields,
   limit: Schema.optional(Schema.NumberFromString.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0))),
@@ -81,6 +90,7 @@ export const SessionPaths = {
   get: `${root}/:sessionID`,
   children: `${root}/:sessionID/children`,
   todo: `${root}/:sessionID/todo`,
+  recap: `${root}/:sessionID/recap`,
   diff: `${root}/:sessionID/diff`,
   messages: `${root}/:sessionID/message`,
   message: `${root}/:sessionID/message/:messageID`,
@@ -163,6 +173,18 @@ export const SessionApi = HttpApi.make("session")
             identifier: "session.todo",
             summary: "Get session todos",
             description: "Retrieve the todo list associated with a specific session, showing tasks and action items.",
+          }),
+        ), // added the http endpoint
+        HttpApiEndpoint.get("recap", SessionPaths.recap, {
+          params: { sessionID: SessionID },
+          query: RecapQuery,
+          success: described(Schema.NullOr(SessionRecap.Result), "Session recap"),
+          error: [HttpApiError.BadRequest, ApiNotFoundError],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.recap",
+            summary: "Get session recap",
+            description: "Retrieve a summary of the session, including key points and unfinished items.",
           }),
         ),
         HttpApiEndpoint.get("diff", SessionPaths.diff, {
