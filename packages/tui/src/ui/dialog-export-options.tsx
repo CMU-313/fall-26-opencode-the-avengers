@@ -7,6 +7,7 @@ import { useTuiConfig } from "../config"
 import { useBindings } from "../keymap"
 
 export type DialogExportOptionsProps = {
+  title?: string
   defaultFilename: string
   defaultThinking: boolean
   defaultToolDetails: boolean
@@ -87,7 +88,7 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
     <box paddingLeft={2} paddingRight={2} gap={1}>
       <box flexDirection="row" justifyContent="space-between">
         <text attributes={TextAttributes.BOLD} fg={theme.text}>
-          Export Options
+          {props.title ?? "Export Options"}
         </text>
         <text fg={theme.textMuted} onMouseUp={() => dialog.clear()}>
           esc
@@ -194,6 +195,7 @@ DialogExportOptions.show = (
   defaultToolDetails: boolean,
   defaultAssistantMetadata: boolean,
   defaultOpenWithoutSaving: boolean,
+  title?: string,
 ) => {
   return new Promise<{
     filename: string
@@ -205,6 +207,7 @@ DialogExportOptions.show = (
     dialog.replace(
       () => (
         <DialogExportOptions
+          title={title}
           defaultFilename={defaultFilename}
           defaultThinking={defaultThinking}
           defaultToolDetails={defaultToolDetails}
