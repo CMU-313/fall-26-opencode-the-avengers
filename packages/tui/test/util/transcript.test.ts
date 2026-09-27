@@ -377,6 +377,29 @@ describe("transcript", () => {
       expect(result.indexOf("second")).toBeLessThan(result.indexOf("third"))
     })
 
+    test("limits the transcript to the most recent messages", () => {
+      const message = (id: string, created: number, text: string) => ({
+        info: {
+          id,
+          sessionID: "ses_abc123",
+          role: "user" as const,
+          agent: "build",
+          model: { providerID: "anthropic", modelID: "claude" },
+          time: { created },
+        },
+        parts: [{ id: `part_${id}`, sessionID: "ses_abc123", messageID: id, type: "text" as const, text }],
+      })
+      const result = formatTranscript(
+        { id: "ses_abc123", title: "Recent", time: { created: 1, updated: 4 } },
+        [message("msg_3", 3, "third"), message("msg_1", 1, "first"), message("msg_2", 2, "second")],
+        { thinking: false, toolDetails: false, assistantMetadata: false },
+        2,
+      )
+
+      expect(result).not.toContain("first")
+      expect(result.indexOf("second")).toBeLessThan(result.indexOf("third"))
+    })
+
     test("falls back to raw model id when provider data is missing", () => {
       const session = {
         id: "ses_abc123",
