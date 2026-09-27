@@ -1,4 +1,5 @@
-import type { AssistantMessage, Part, Provider, UserMessage } from "@opencode-ai/sdk/v2"
+import type { AssistantMessage, Part, Provider, TextPart, UserMessage } from "@opencode-ai/sdk/v2"
+import path from "path"
 import { Locale } from "./locale"
 import * as Model from "./model"
 
@@ -43,6 +44,36 @@ export function formatTranscript(
   }
 
   return transcript
+}
+
+export type ResponseFormat = "md" | "txt"
+
+// Plain text keeps only the visible answer; thinking, tool details, and metadata are Markdown-only options.
+export function formatResponse(
+  msg: AssistantMessage,
+  parts: Part[],
+  format: ResponseFormat,
+  options: TranscriptOptions,
+): string {
+  if (format === "md") return `${formatMessage(msg, parts, options).trimEnd()}\n`
+  const text = parts
+    .filter((part): part is TextPart => part.type === "text" && !part.synthetic)
+    .map((part) => part.text.trim())
+    .filter((text) => text.length > 0)
+    .join("\n\n")
+  return text ? `${text}\n` : ""
+}
+
+// Resolves the save format from the extension, defaulting to Markdown when none is given.
+export function parseResponseFilename(input: string): { filename: string; format: ResponseFormat } | undefined {
+  const filename = input.trim()
+  const base = path.basename(filename)
+  if (!base || /[\\/]$/.test(filename) || /^\.(md|txt)$/i.test(base)) return undefined
+  const extension = path.extname(base).toLowerCase()
+  if (extension === "") return { filename: `${filename}.md`, format: "md" }
+  if (extension === ".md") return { filename, format: "md" }
+  if (extension === ".txt") return { filename, format: "txt" }
+  return undefined
 }
 
 export function formatMessage(

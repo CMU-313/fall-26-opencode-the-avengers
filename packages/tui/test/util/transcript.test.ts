@@ -1,5 +1,12 @@
 import { describe, expect, test } from "bun:test"
-import { formatAssistantHeader, formatMessage, formatPart, formatTranscript } from "../../src/util/transcript"
+import {
+  formatAssistantHeader,
+  formatMessage,
+  formatPart,
+  formatResponse,
+  formatTranscript,
+  parseResponseFilename,
+} from "../../src/util/transcript"
 import type { AssistantMessage, Part, Provider, UserMessage } from "@opencode-ai/sdk/v2"
 
 const providers: Provider[] = [
@@ -444,6 +451,106 @@ describe("transcript", () => {
       expect(result).toContain("## Assistant\n\n")
       expect(result).not.toContain("Build")
       expect(result).not.toContain("claude-sonnet-4-20250514")
+    })
+  })
+
+  describe("formatResponse", () => {
+    const msg: AssistantMessage = {
+      id: "msg_123",
+      sessionID: "ses_123",
+      role: "assistant",
+      agent: "build",
+      modelID: "claude-sonnet-4-20250514",
+      providerID: "anthropic",
+      mode: "",
+      parentID: "msg_parent",
+      path: { cwd: "/test", root: "/test" },
+      cost: 0.001,
+      tokens: { input: 100, output: 50, reasoning: 0, cache: { read: 0, write: 0 } },
+      time: { created: 1000000, completed: 1005400 },
+    }
+    const parts: Part[] = [
+      {
+        id: "p1",
+        sessionID: "ses_123",
+        messageID: "msg_123",
+        type: "reasoning",
+        text: "Pondering",
+        time: { start: 0 },
+      },
+      { id: "p2", sessionID: "ses_123", messageID: "msg_123", type: "text", text: "First **paragraph**" },
+      {
+        id: "p3",
+        sessionID: "ses_123",
+        messageID: "msg_123",
+        type: "text",
+        text: "Hidden reminder",
+        synthetic: true,
+      },
+      { id: "p4", sessionID: "ses_123", messageID: "msg_123", type: "text", text: "Second paragraph\n" },
+    ]
+
+    test("formats markdown with header and metadata", () => {
+      const result = formatResponse(msg, parts, "md", {
+        thinking: false,
+        toolDetails: false,
+        assistantMetadata: true,
+        providers,
+      })
+      expect(result).toBe("## Assistant (Build · Claude Sonnet 4 · 5.4s)\n\nFirst **paragraph**\n\nSecond paragraph\n")
+    })
+
+    test("includes thinking in markdown when enabled", () => {
+      const result = formatResponse(msg, parts, "md", { thinking: true, toolDetails: false, assistantMetadata: false })
+      expect(result).toStartWith("## Assistant\n\n_Thinking:_\n\nPondering")
+    })
+
+    test("formats plain text with only visible response text", () => {
+      const result = formatResponse(msg, parts, "txt", { thinking: true, toolDetails: true, assistantMetadata: true })
+      expect(result).toBe("First **paragraph**\n\nSecond paragraph\n")
+    })
+
+    test("returns empty plain text when there is no visible text", () => {
+      const result = formatResponse(msg, [parts[0], parts[2]], "txt", {
+        thinking: true,
+        toolDetails: true,
+        assistantMetadata: true,
+      })
+      expect(result).toBe("")
+    })
+  })
+
+  describe("parseResponseFilename", () => {
+    test("accepts markdown and text extensions", () => {
+      expect(parseResponseFilename("answer.md")).toEqual({ filename: "answer.md", format: "md" })
+      expect(parseResponseFilename("answer.txt")).toEqual({ filename: "answer.txt", format: "txt" })
+    })
+
+    test("matches extensions case-insensitively and preserves the name", () => {
+      expect(parseResponseFilename("Answer.MD")).toEqual({ filename: "Answer.MD", format: "md" })
+      expect(parseResponseFilename("Answer.TXT")).toEqual({ filename: "Answer.TXT", format: "txt" })
+    })
+
+    test("defaults to markdown when no extension is given", () => {
+      expect(parseResponseFilename("answer")).toEqual({ filename: "answer.md", format: "md" })
+    })
+
+    test("trims whitespace and keeps nested paths", () => {
+      expect(parseResponseFilename("  notes/answer.txt  ")).toEqual({ filename: "notes/answer.txt", format: "txt" })
+    })
+
+    test("rejects unsupported extensions", () => {
+      expect(parseResponseFilename("answer.pdf")).toBeUndefined()
+      expect(parseResponseFilename("answer.md.bak")).toBeUndefined()
+      expect(parseResponseFilename("answer.")).toBeUndefined()
+    })
+
+    test("rejects empty names and directories", () => {
+      expect(parseResponseFilename("")).toBeUndefined()
+      expect(parseResponseFilename("   ")).toBeUndefined()
+      expect(parseResponseFilename("notes/")).toBeUndefined()
+      expect(parseResponseFilename(".md")).toBeUndefined()
+      expect(parseResponseFilename("notes/.txt")).toBeUndefined()
     })
   })
 })
