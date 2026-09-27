@@ -188,9 +188,12 @@ export default function () {
     }
 
     window.addEventListener("pagehide", removeCurrentViewer)
+    window.addEventListener("beforeunload", removeCurrentViewer)
 
     onCleanup(() => {
       window.removeEventListener("pagehide", removeCurrentViewer)
+      window.addEventListener("beforeunload", removeCurrentViewer)
+      
     })
   })
 
@@ -356,7 +359,7 @@ export default function () {
                             <div class="flex gap-3 items-center">
 
                               <div class="text-12-regular text-text-weaker">
-                                Currently viewing: {viewers().length}
+                                Additional Viewers: {viewers().length}
                               </div>           
                                                  
                               <IconButton
