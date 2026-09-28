@@ -8,6 +8,12 @@ function fn<T extends z.ZodType, Result>(schema: T, cb: (input: z.infer<T>) => R
 }
 
 export namespace Share {
+  export const Viewer = z.object({
+    id: z.string(),
+    name: z.string(),
+  })
+  export type Viewer = z.infer<typeof Viewer>
+
   export const Info = z.object({
     id: z.string(),
     secret: z.string(),
@@ -141,6 +147,7 @@ export namespace Share {
       Storage.list({ prefix: ["share_compaction", body.id] }),
       Storage.list({ prefix: ["share_event", body.id] }),
       Storage.list({ prefix: ["share_data", body.id] }),
+      Storage.list({ prefix: ["share_viewer", body.id] }),
     ])
     for (const item of groups.flat()) {
       await Storage.remove(item)
@@ -211,6 +218,26 @@ export namespace Share {
       await Promise.all(promises)
     },
   )
+
+  export async function addViewer(shareID: string, viewer: Viewer) {
+    await Storage.write(["share_viewer", shareID, viewer.id], viewer)
+  }
+
+  export async function removeViewer(shareID: string, viewerID: string) {
+    await Storage.remove(["share_viewer", shareID, viewerID])
+  }
+
+  export async function viewers(shareID: string) {
+    const keys = await Storage.list({
+      prefix: ["share_viewer", shareID],
+    })
+
+    const result = await Promise.all(
+      keys.map((key) => Storage.read<Viewer>(key)),
+    )
+
+    return result.filter((viewer): viewer is Viewer => viewer !== undefined)
+  }
 
   export const Errors = {
     NotFound: class extends Error {

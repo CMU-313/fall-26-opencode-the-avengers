@@ -5,7 +5,7 @@ import { DataProvider } from "@opencode-ai/session-ui/context"
 import { FileComponentProvider } from "@opencode-ai/ui/context/file"
 import { WorkerPoolProvider } from "@opencode-ai/ui/context/worker-pool"
 import { createAsync, query, useParams } from "@solidjs/router"
-import { createMemo, createSignal, ErrorBoundary, For, Match, Show, Switch } from "solid-js"
+import { createEffect, createMemo, createSignal, ErrorBoundary, For, Match, onCleanup, onMount, Show, Switch } from "solid-js"
 import { Share } from "~/core/share"
 import { Logo, Mark } from "@opencode-ai/ui/logo"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -23,6 +23,7 @@ import { clientOnly } from "@solidjs/start"
 import { Meta, Title } from "@solidjs/meta"
 import { Base64 } from "js-base64"
 import { getRequestEvent } from "solid-js/web"
+
 
 const ClientOnlyWorkerPoolProvider = clientOnly(() =>
   import("@opencode-ai/session-ui/pierre/worker").then((m) => ({
@@ -121,6 +122,26 @@ const getData = query(async (shareID) => {
   return result
 }, "getShareData")
 
+
+const addViewer = query(async (shareID: string, viewer: Share.Viewer) => {
+  "use server"
+
+  await Share.addViewer(shareID, viewer)
+}, "addShareViewer")
+
+const getViewers = query(async (shareID: string) => {
+  "use server"
+
+  return Share.viewers(shareID)
+}, "getShareViewers")
+
+const removeViewer = query(async (shareID: string, viewerID: string) => {
+  "use server"
+
+  await Share.removeViewer(shareID, viewerID)
+}, "removeShareViewer")
+
+
 export default function () {
   getRequestEvent()?.response.headers.set(
     "Cache-Control",
@@ -128,6 +149,64 @@ export default function () {
   )
 
   const params = useParams()
+
+  const [viewers, setViewers] = createSignal<Share.Viewer[]>([])
+
+  let viewerID = ""
+  let interval: ReturnType<typeof setInterval>
+
+  onMount(async () => {
+    const shareID = params.shareID
+    if (!shareID) return
+
+    viewerID = localStorage.getItem("viewer-id") ?? crypto.randomUUID()
+    localStorage.setItem("viewer-id", viewerID)
+
+    const viewer = {
+      id: viewerID,
+      name: "Viewer",
+    }
+
+    await addViewer(shareID, viewer)
+
+    const refreshViewers = async () => {
+      const current = await getViewers(shareID)
+      setViewers(current)
+    }
+
+    await refreshViewers()
+
+    interval = setInterval(refreshViewers, 2000)
+
+    const removeCurrentViewer = () => {
+      if (!viewerID) return
+
+      void fetch(`/api/share/${shareID}/viewer/${viewerID}`, {
+        method: "DELETE",
+        keepalive: true,
+      })
+    }
+
+    window.addEventListener("pagehide", removeCurrentViewer)
+    window.addEventListener("beforeunload", removeCurrentViewer)
+
+    onCleanup(() => {
+      clearInterval(interval)
+      window.removeEventListener("pagehide", removeCurrentViewer)
+      window.addEventListener("beforeunload", removeCurrentViewer)
+      
+    })
+  })
+
+  onCleanup(() => {
+    clearInterval(interval)
+
+    if (!params.shareID || !viewerID) return
+
+    void removeViewer(params.shareID, viewerID)
+  })
+
+
   const data = createAsync(async () => {
     if (!params.shareID) throw new Error("Missing shareID")
     return getData(params.shareID)
@@ -279,6 +358,11 @@ export default function () {
                               </a>
                             </div>
                             <div class="flex gap-3 items-center">
+
+                              <div class="text-12-regular text-text-weaker">
+                                Additional Viewers: {viewers().length}
+                              </div>           
+                                                 
                               <IconButton
                                 as={"a"}
                                 href="https://github.com/anomalyco/opencode"
