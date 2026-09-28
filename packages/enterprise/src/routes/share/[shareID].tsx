@@ -191,6 +191,7 @@ export default function () {
     window.addEventListener("beforeunload", removeCurrentViewer)
 
     onCleanup(() => {
+      clearInterval(interval)
       window.removeEventListener("pagehide", removeCurrentViewer)
       window.addEventListener("beforeunload", removeCurrentViewer)
       
