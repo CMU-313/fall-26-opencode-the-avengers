@@ -11,15 +11,32 @@ const EDGE_CHUNK_BYTES = 4096
 // Seconds between the Windows epoch (1601) and the Unix epoch (1970).
 const WINDOWS_EPOCH = 11_644_473_600
 
-/** Reads markdown aloud with Microsoft Edge's neural voice. Resolves once the audio starts playing. */
+let playback: AbortController | undefined
+
+/** Starts reading aloud, or stops the current reading if one is loading or playing. */
 export async function speak(markdown: string) {
+  if (playback) {
+    playback.abort()
+    playback = undefined
+    return
+  }
   const text = speakable(markdown)
   if (!text) throw new Error("There is no text to read aloud")
-  const stream = await playStream(edgeAudio(text), { format: "mp3" }).catch((error: Error) => {
+  const current = new AbortController()
+  playback = current
+  try {
+    const stream = await playStream(edgeAudio(text), { format: "mp3", signal: current.signal })
+    if (current.signal.aborted) return
+    if (!stream) throw new Error("No audio output device. Run opencode on your computer, not in Docker or over SSH.")
+    void stream.closed.then(() => {
+      if (playback === current) playback = undefined
+    })
+  } catch (error) {
+    if (playback === current) playback = undefined
+    if (current.signal.aborted) return
     // OpenTUI wraps download failures; the cause says what actually went wrong.
-    throw error.cause instanceof Error ? error.cause : error
-  })
-  if (!stream) throw new Error("No audio output device. Run opencode on your computer, not in Docker or over SSH.")
+    throw error instanceof Error && error.cause instanceof Error ? error.cause : error
+  }
 }
 
 /** MP3 for the whole text. Every chunk downloads right away, back to back, so playback never waits between chunks. */
