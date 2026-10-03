@@ -69,6 +69,7 @@ import { QuestionPrompt } from "./question"
 import { DialogExportOptions } from "../../ui/dialog-export-options"
 import * as Model from "../../util/model"
 import { formatResponse, formatTranscript, parseResponseFilename } from "../../util/transcript"
+import { writeResponseFile } from "../../util/response-file"
 import { sessionEpilogue } from "../../util/presentation"
 import { setPreLayoutSiblingMargin } from "../../util/layout"
 import { useTuiConfig } from "../../config"
@@ -397,14 +398,14 @@ export function Session() {
         })
         return
       }
-      const filepath = path.resolve(paths.cwd, target.filename)
-      if (
-        (await Bun.file(filepath).exists()) &&
-        !(await DialogConfirm.show(dialog, "Overwrite file?", `${target.filename} already exists. Replace it?`))
-      )
-        return
-      await writeExport(filepath, content)
-      toast.show({ message: `Response saved to ${target.filename}`, variant: "success" })
+      const written = await writeResponseFile({
+        directory: paths.cwd,
+        filename: target.filename,
+        content,
+        confirmOverwrite: () =>
+          DialogConfirm.show(dialog, "Overwrite file?", `${target.filename} already exists. Replace it?`),
+      })
+      if (written) toast.show({ message: `Response saved to ${target.filename}`, variant: "success" })
     } catch {
       toast.show({ message: "Failed to save response", variant: "error" })
     } finally {
