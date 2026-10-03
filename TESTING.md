@@ -33,7 +33,8 @@ only declares `test` as a task for a handful of packages:
 "@opencode-ai/core#test": { ... },
 "@opencode-ai/app#test": { ... },
 "@opencode-ai/ui#test": { ... },
-"@opencode-ai/session-ui#test": { ... }
+"@opencode-ai/session-ui#test": { ... },
+"@opencode-ai/tui#test": { ... }
 ```
 
 If your package isn't in that list, `bun turbo test` silently skips its `test` script in CI, even if you have real
