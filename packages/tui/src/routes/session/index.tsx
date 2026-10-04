@@ -69,7 +69,8 @@ import { PermissionPrompt } from "./permission"
 import { QuestionPrompt } from "./question"
 import { DialogExportOptions } from "../../ui/dialog-export-options"
 import * as Model from "../../util/model"
-import { formatTranscript } from "../../util/transcript"
+import { formatResponse, formatTranscript, parseResponseFilename } from "../../util/transcript"
+import { writeResponseFile } from "../../util/response-file"
 import { sessionEpilogue } from "../../util/presentation"
 import { setPreLayoutSiblingMargin } from "../../util/layout"
 import { useTuiConfig } from "../../config"
@@ -167,6 +168,7 @@ const context = createContext<{
   showGenericToolOutput: () => boolean
   diffWrapMode: () => "word" | "none"
   providers: () => ReadonlyMap<string, Provider>
+  openMessageActions: (messageID: string) => void
   sync: ReturnType<typeof useSync>
   tui: ReturnType<typeof useTuiConfig>
 }>()
@@ -356,6 +358,74 @@ export function Session() {
   const keymap = useOpencodeKeymap()
   const dialog = useDialog()
   const renderer = useRenderer()
+
+  const saveResponse = async (message: AssistantMessage) => {
+    const parts = sync.data.part[message.id] ?? []
+    if (!parts.some((part) => part.type === "text" && !part.synthetic && part.text.trim())) {
+      toast.show({ message: "No text content found in assistant response", variant: "error" })
+      dialog.clear()
+      return
+    }
+    try {
+      const options = await DialogExportOptions.show(
+        dialog,
+        // Message IDs share a time-ordered prefix, so the suffix keeps default names distinct.
+        `response-${message.id.slice(-8)}.md`,
+        showThinking(),
+        showDetails(),
+        showAssistantMetadata(),
+        false,
+        "Save Response",
+      )
+      if (options === null) return
+      const target = parseResponseFilename(options.filename)
+      if (!target) {
+        toast.show({ message: "Filename must end in .md or .txt", variant: "error" })
+        return
+      }
+      const content = formatResponse(message, parts, target.format, {
+        thinking: options.thinking,
+        toolDetails: options.toolDetails,
+        assistantMetadata: options.assistantMetadata,
+        providers: sync.data.provider,
+      })
+      if (options.openWithoutSaving) {
+        await openEditor({
+          renderer,
+          value: content,
+          cwd:
+            (project.instance.path().worktree === "/" ? undefined : project.instance.path().worktree) ||
+            project.instance.directory() ||
+            paths.cwd,
+        })
+        return
+      }
+      const written = await writeResponseFile({
+        directory: paths.cwd,
+        filename: target.filename,
+        content,
+        confirmOverwrite: () =>
+          DialogConfirm.show(dialog, "Overwrite file?", `${target.filename} already exists. Replace it?`),
+      })
+      if (written) toast.show({ message: `Response saved to ${target.filename}`, variant: "success" })
+    } catch {
+      toast.show({ message: "Failed to save response", variant: "error" })
+    } finally {
+      dialog.clear()
+    }
+  }
+
+  const openMessageActions = (messageID: string) => {
+    if (renderer.getSelection()?.getSelectedText()) return
+    dialog.replace(() => (
+      <DialogMessage
+        messageID={messageID}
+        sessionID={route.sessionID}
+        setPrompt={(promptInfo) => prompt?.set(promptInfo)}
+        onSave={saveResponse}
+      />
+    ))
+  }
 
   event.on("session.status", (evt) => {
     if (evt.properties.sessionID !== route.sessionID) return
@@ -917,7 +987,25 @@ export function Session() {
       },
     },
     {
-      
+      title: "Save last assistant response",
+      value: "messages.save",
+      category: "Session",
+      slash: {
+        name: "save",
+      },
+      run: async () => {
+        const lastAssistantMessage = messagesBeforeRevert().findLast(
+          (message): message is AssistantMessage => message.role === "assistant",
+        )
+        if (!lastAssistantMessage) {
+          toast.show({ message: "No assistant messages found", variant: "error" })
+          dialog.clear()
+          return
+        }
+        await saveResponse(lastAssistantMessage)
+      },
+    },
+    {      
       title: "Speak last response",
       value: "session.speech",
       category: "Session",
@@ -1193,6 +1281,7 @@ export function Session() {
           showGenericToolOutput,
           diffWrapMode,
           providers,
+          openMessageActions,
           sync,
           tui: tuiConfig,
         }}
@@ -1291,16 +1380,7 @@ export function Session() {
                       <Match when={message.role === "user"}>
                         <UserMessage
                           index={index()}
-                          onMouseUp={() => {
-                            if (renderer.getSelection()?.getSelectedText()) return
-                            dialog.replace(() => (
-                              <DialogMessage
-                                messageID={message.id}
-                                sessionID={route.sessionID}
-                                setPrompt={(promptInfo) => prompt?.set(promptInfo)}
-                              />
-                            ))
-                          }}
+                          onMouseUp={() => openMessageActions(message.id)}
                           message={message as UserMessage}
                           parts={sync.data.part[message.id] ?? []}
                           pending={pending()}
@@ -1719,7 +1799,13 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
   const { theme, syntax } = useTheme()
   return (
     <Show when={props.part.text.trim()}>
-      <box ref={(el: BoxRenderable) => alwaysSeparate.add(el)} paddingLeft={3} marginTop={1} flexShrink={0}>
+      <box
+        ref={(el: BoxRenderable) => alwaysSeparate.add(el)}
+        paddingLeft={3}
+        marginTop={1}
+        flexShrink={0}
+        onMouseUp={() => ctx.openMessageActions(props.message.id)}
+      >
         <markdown
           syntaxStyle={syntax()}
           streaming={true}
