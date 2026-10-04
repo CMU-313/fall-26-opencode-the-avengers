@@ -63,6 +63,47 @@ export namespace Storage {
     }
   }
 
+  function memory(): Adapter {
+    const data = new Map<string, string>()
+
+    return {
+      async read(path: string) {
+        return data.get(path)
+      },
+
+      async write(path: string, value: string) {
+        data.set(path, value)
+      },
+
+      async remove(path: string) {
+        data.delete(path)
+      },
+
+      async list(options) {
+        const prefix = options?.prefix ?? ""
+
+        let keys = Array.from(data.keys())
+          .filter((key) => key.startsWith(prefix))
+          .sort()
+
+        if (options?.after) {
+          keys = keys.filter((key) => key > prefix + options.after + ".json")
+        }
+
+        if (options?.before) {
+          keys = keys.filter((key) => key < prefix + options.before + ".json")
+        }
+
+        if (options?.limit) {
+          keys = keys.slice(0, options.limit)
+        }
+
+        return keys
+      },
+    }
+  }
+
+
   function s3(): Adapter {
     const bucket = process.env.OPENCODE_STORAGE_BUCKET!
     const region = process.env.OPENCODE_STORAGE_REGION || "us-east-1"
@@ -85,11 +126,12 @@ export namespace Storage {
 
   const adapter = lazy(() => {
     const type = process.env.OPENCODE_STORAGE_ADAPTER
+    if (type === "memory") return memory()
     if (type === "r2") return r2()
     if (type === "s3") return s3()
     throw new Error("No storage adapter configured")
   })
-
+  
   function resolve(key: string[]) {
     return key.join("/") + ".json"
   }

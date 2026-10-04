@@ -1,6 +1,6 @@
 import { useProject } from "../../context/project"
 import { useSync } from "../../context/sync"
-import { createMemo, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, onCleanup, Show } from "solid-js"
 import { useTheme } from "../../context/theme"
 import { useTuiConfig } from "../../config"
 import { InstallationChannel, InstallationVersion } from "@opencode-ai/core/installation/version"
@@ -16,6 +16,43 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const { theme } = useTheme()
   const tuiConfig = useTuiConfig()
   const session = createMemo(() => sync.session.get(props.sessionID))
+  const [viewerCount, setViewerCount] = createSignal(0)
+  
+  createEffect(() => {
+    const shareURL = session()?.share?.url
+
+    if (!shareURL) {
+      setViewerCount(0)
+      return
+    }
+
+    const url = new URL(shareURL)
+    const shareID = url.pathname.split("/").pop()
+
+    if (!shareID) return
+
+    const refreshViewers = async () => {
+      try {
+        const response = await fetch(`${url.origin}/api/share/${shareID}/viewers`)
+        const data = (await response.json()) as {
+          viewers: { id: string; name: string }[]
+        }
+
+        setViewerCount(data.viewers.length)
+      } catch {
+        setViewerCount(0)
+      }
+    }
+
+    void refreshViewers()
+
+    const interval = setInterval(refreshViewers, 2000)
+
+    onCleanup(() => {
+      clearInterval(interval)
+    })
+  })
+
   const workspace = () => {
     const workspaceID = session()?.workspaceID
     if (!workspaceID) return
@@ -79,6 +116,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                 </Show>
                 <Show when={session()!.share?.url}>
                   <text fg={theme.textMuted}>{session()!.share!.url}</text>
+                  <text fg={theme.textMuted}>Additional Viewers: {viewerCount()}</text>
                 </Show>
               </box>
             </pluginRuntime.Slot>
