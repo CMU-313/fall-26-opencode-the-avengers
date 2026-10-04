@@ -114,6 +114,37 @@ app
       return c.json(await Share.data(shareID))
     },
   )
+  .get(
+    "/share/:shareID/viewers",
+    validator(
+      "param",
+      z.object({
+        shareID: z.string(),
+      }),
+    ),
+    async (c) => {
+      const { shareID } = c.req.valid("param")
+      const viewers = await Share.viewers(shareID)
+
+      return c.json({ viewers })
+    },
+  )
+  
+  .delete(
+    "/share/:shareID/viewer/:viewerID",
+    validator(
+      "param",
+      z.object({
+        shareID: z.string(),
+        viewerID: z.string(),
+      }),
+    ),
+    async (c) => {
+      const { shareID, viewerID } = c.req.valid("param")
+      await Share.removeViewer(shareID, viewerID)
+      return c.json({})
+    },
+  )
   .delete(
     "/share/:shareID",
     describeRoute({

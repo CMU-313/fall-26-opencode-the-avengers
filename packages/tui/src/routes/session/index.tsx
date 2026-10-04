@@ -83,6 +83,7 @@ import { getRevertDiffFiles } from "../../util/revert-diff"
 import { OPENCODE_BASE_MODE, useBindings, useCommandShortcut, useOpencodeKeymap } from "../../keymap"
 import { usePathFormatter } from "../../context/path-format"
 import { LocationProvider } from "../../context/location"
+import { speak } from "../../speech"
 
 addDefaultParsers(parsers.parsers)
 
@@ -916,13 +917,32 @@ export function Session() {
       },
     },
     {
-      title: "Copy session transcript",
+      
+      title: "Speak last response",
+      value: "session.speech",
+      category: "Session",
+      slash: {
+        name: "speech",
+      },
+      run: () => {
+      dialog.clear()
+        const last = messagesBeforeRevert().findLast((message) => message.role === "assistant")
+        const text = messagesBeforeRevert()
+          .filter((message) => message.role === "assistant" && message.parentID === last?.parentID)
+          .flatMap((message) => sync.data.part[message.id] ?? [])
+          .flatMap((part) => (part.type === "text" ? [part.text] : []))
+          .join("\n\n")
+        void speak(text)
+      },
+    },
+    {
+      title: "/copy [x] to copy last x messages, otherwise copy session transcript",
       value: "session.copy",
       category: "Session",
       slash: {
         name: "copy",
       },
-      run: async () => {
+      run: async (ctx: { payload: unknown }) => {
         try {
           const sessionData = session()
           if (!sessionData) return
@@ -936,6 +956,7 @@ export function Session() {
               assistantMetadata: showAssistantMetadata(),
               providers: sync.data.provider,
             },
+            typeof ctx.payload === "number" ? ctx.payload : undefined,
           )
           await clipboard.write?.(transcript)
           toast.show({ message: "Session transcript copied to clipboard!", variant: "success" })
