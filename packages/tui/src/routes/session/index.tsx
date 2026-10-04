@@ -916,6 +916,7 @@ export function Session() {
       },
     },
     {
+      
       title: "Speak last response",
       value: "session.speech",
       category: "Session",
@@ -934,13 +935,13 @@ export function Session() {
       },
     },
     {
-      title: "Copy session transcript",
+      title: "/copy [x] to copy last x messages, otherwise copy session transcript",
       value: "session.copy",
       category: "Session",
       slash: {
         name: "copy",
       },
-      run: async () => {
+      run: async (ctx: { payload: unknown }) => {
         try {
           const sessionData = session()
           if (!sessionData) return
@@ -954,6 +955,7 @@ export function Session() {
               assistantMetadata: showAssistantMetadata(),
               providers: sync.data.provider,
             },
+            typeof ctx.payload === "number" ? ctx.payload : undefined,
           )
           await clipboard.write?.(transcript)
           toast.show({ message: "Session transcript copied to clipboard!", variant: "success" })

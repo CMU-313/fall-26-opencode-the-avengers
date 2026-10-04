@@ -23,10 +23,35 @@ export type MessageWithParts = {
   parts: Part[]
 }
 
+export type CopyCommandState =
+  | { kind: "none" }
+  | { kind: "invalid" }
+  | { kind: "noop" }
+  | { kind: "copy"; count?: number }
+
+export function getCopyCommandState(input: string, messageCount: number): CopyCommandState {
+  const match = input.trim().match(/^\/copy(?:\s+([\s\S]+))?$/)
+  if (!match) return { kind: "none" }
+
+  if (match[1] === undefined) {
+    if (messageCount <= 0) return { kind: "noop" }
+    return { kind: "copy" }
+  }
+
+  const argument = match[1].trim()
+  if (messageCount <= 0) return { kind: "noop" }
+
+  const count = Number(argument)
+  if (!/^\d+$/.test(argument) || !Number.isSafeInteger(count) || count < 1) return { kind: "invalid" }
+
+  return { kind: "copy", count }
+}
+
 export function formatTranscript(
   session: SessionInfo,
   messages: MessageWithParts[],
   options: TranscriptOptions,
+  limit?: number,
 ): string {
   const providers = Model.index(options.providers)
   let transcript = `# ${session.title}\n\n`
@@ -35,9 +60,11 @@ export function formatTranscript(
   transcript += `**Updated:** ${new Date(session.time.updated).toLocaleString()}\n\n`
   transcript += `---\n\n`
 
-  for (const msg of messages.toSorted(
+  const ordered = messages.toSorted(
     (a, b) => a.info.time.created - b.info.time.created || a.info.id.localeCompare(b.info.id),
-  )) {
+  )
+
+  for (const msg of limit === undefined ? ordered : ordered.slice(-limit)) {
     transcript += formatMessage(msg.info, msg.parts, options, providers)
     transcript += `---\n\n`
   }

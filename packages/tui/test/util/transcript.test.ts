@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test"
-import { formatAssistantHeader, formatMessage, formatPart, formatTranscript } from "../../src/util/transcript"
+import {
+  formatAssistantHeader,
+  formatMessage,
+  formatPart,
+  formatTranscript,
+  getCopyCommandState,
+} from "../../src/util/transcript"
 import type { AssistantMessage, Part, Provider, UserMessage } from "@opencode-ai/sdk/v2"
 
 const providers: Provider[] = [
@@ -375,6 +381,189 @@ describe("transcript", () => {
 
       expect(result.indexOf("first")).toBeLessThan(result.indexOf("second"))
       expect(result.indexOf("second")).toBeLessThan(result.indexOf("third"))
+    })
+
+    test("limits the transcript to the most recent messages", () => {
+      const message = (id: string, created: number, text: string) => ({
+        info: {
+          id,
+          sessionID: "ses_abc123",
+          role: "user" as const,
+          agent: "build",
+          model: { providerID: "anthropic", modelID: "claude" },
+          time: { created },
+        },
+        parts: [{ id: `part_${id}`, sessionID: "ses_abc123", messageID: id, type: "text" as const, text }],
+      })
+      const result = formatTranscript(
+        { id: "ses_abc123", title: "Recent", time: { created: 1, updated: 4 } },
+        [message("msg_3", 3, "third"), message("msg_1", 1, "first"), message("msg_2", 2, "second")],
+        { thinking: false, toolDetails: false, assistantMetadata: false },
+        2,
+      )
+
+      expect(result).not.toContain("first")
+      expect(result.indexOf("second")).toBeLessThan(result.indexOf("third"))
+    })
+
+    test("rejects invalid /copy counts with a positive integer state", () => {
+      for (const command of ["/copy 0", "/copy a", "/copy -1", "/copy 1.5"]) {
+        expect(getCopyCommandState(command, 3)).toEqual({ kind: "invalid" })
+      }
+    })
+
+    test("copies the full transcript when the requested limit exceeds available messages", () => {
+      const session = {
+        id: "ses_abc123",
+        title: "Recent Limit",
+        time: { created: 1, updated: 4 },
+      }
+      const messages = [
+        {
+          info: {
+            id: "msg_1",
+            sessionID: "ses_abc123",
+            role: "user" as const,
+            agent: "build",
+            model: { providerID: "anthropic", modelID: "claude" },
+            time: { created: 1 },
+          },
+          parts: [{ id: "p1", sessionID: "ses_abc123", messageID: "msg_1", type: "text" as const, text: "first" }],
+        },
+        {
+          info: {
+            id: "msg_2",
+            sessionID: "ses_abc123",
+            role: "assistant" as const,
+            agent: "build",
+            modelID: "claude",
+            providerID: "anthropic",
+            mode: "",
+            parentID: "msg_1",
+            path: { cwd: "/test", root: "/test" },
+            cost: 0.001,
+            tokens: { input: 10, output: 5, reasoning: 0, cache: { read: 0, write: 0 } },
+            time: { created: 2, completed: 4 },
+          },
+          parts: [{ id: "p2", sessionID: "ses_abc123", messageID: "msg_2", type: "text" as const, text: "second" }],
+        },
+      ]
+      const options = { thinking: false, toolDetails: false, assistantMetadata: false }
+      const full = formatTranscript(session, messages, options)
+      const truncated = formatTranscript(session, messages, options, 20)
+
+      expect(truncated).toBe(full)
+    })
+
+    test("uses the full transcript when /copy is run without a count", () => {
+      const session = {
+        id: "ses_abc123",
+        title: "Full Copy",
+        time: { created: 1, updated: 3 },
+      }
+      const messages = [
+        {
+          info: {
+            id: "msg_1",
+            sessionID: "ses_abc123",
+            role: "user" as const,
+            agent: "build",
+            model: { providerID: "anthropic", modelID: "claude" },
+            time: { created: 1 },
+          },
+          parts: [{ id: "p1", sessionID: "ses_abc123", messageID: "msg_1", type: "text" as const, text: "hello" }],
+        },
+        {
+          info: {
+            id: "msg_2",
+            sessionID: "ses_abc123",
+            role: "assistant" as const,
+            agent: "build",
+            modelID: "claude",
+            providerID: "anthropic",
+            mode: "",
+            parentID: "msg_1",
+            path: { cwd: "/test", root: "/test" },
+            cost: 0.001,
+            tokens: { input: 10, output: 5, reasoning: 0, cache: { read: 0, write: 0 } },
+            time: { created: 2, completed: 3 },
+          },
+          parts: [{ id: "p2", sessionID: "ses_abc123", messageID: "msg_2", type: "text" as const, text: "world" }],
+        },
+      ]
+      const options = { thinking: false, toolDetails: false, assistantMetadata: false }
+      const full = formatTranscript(session, messages, options)
+      const noLimit = formatTranscript(session, messages, options, undefined)
+
+      expect(noLimit).toBe(full)
+      expect(noLimit).toContain("hello")
+      expect(noLimit).toContain("world")
+    })
+
+    test("repeating /copy x produces the same transcript each time", () => {
+      const session = {
+        id: "ses_abc123",
+        title: "Repeated Copy",
+        time: { created: 1, updated: 5 },
+      }
+      const messages = [
+        {
+          info: {
+            id: "msg_1",
+            sessionID: "ses_abc123",
+            role: "user" as const,
+            agent: "build",
+            model: { providerID: "anthropic", modelID: "claude" },
+            time: { created: 1 },
+          },
+          parts: [{ id: "p1", sessionID: "ses_abc123", messageID: "msg_1", type: "text" as const, text: "first" }],
+        },
+        {
+          info: {
+            id: "msg_2",
+            sessionID: "ses_abc123",
+            role: "assistant" as const,
+            agent: "build",
+            modelID: "claude",
+            providerID: "anthropic",
+            mode: "",
+            parentID: "msg_1",
+            path: { cwd: "/test", root: "/test" },
+            cost: 0.001,
+            tokens: { input: 10, output: 5, reasoning: 0, cache: { read: 0, write: 0 } },
+            time: { created: 2, completed: 3 },
+          },
+          parts: [{ id: "p2", sessionID: "ses_abc123", messageID: "msg_2", type: "text" as const, text: "second" }],
+        },
+        {
+          info: {
+            id: "msg_3",
+            sessionID: "ses_abc123",
+            role: "user" as const,
+            agent: "build",
+            model: { providerID: "anthropic", modelID: "claude" },
+            time: { created: 4 },
+          },
+          parts: [{ id: "p3", sessionID: "ses_abc123", messageID: "msg_3", type: "text" as const, text: "third" }],
+        },
+      ]
+      const options = { thinking: false, toolDetails: false, assistantMetadata: false }
+      const first = formatTranscript(session, messages, options, 2)
+      const second = formatTranscript(session, messages, options, 2)
+
+      expect(first).toBe(second)
+      expect(first).toContain("second")
+      expect(first).toContain("third")
+    })
+
+    test("treats /copy 1 on an empty session as a no-op instead of forwarding it", () => {
+      expect(getCopyCommandState("/copy 1", 0)).toEqual({ kind: "noop" })
+    })
+
+    test("treats invalid /copy counts on an empty session as a no-op", () => {
+      for (const command of ["/copy 0", "/copy a", "/copy -1"]) {
+        expect(getCopyCommandState(command, 0)).toEqual({ kind: "noop" })
+      }
     })
 
     test("falls back to raw model id when provider data is missing", () => {

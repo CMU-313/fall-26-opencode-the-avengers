@@ -57,6 +57,7 @@ import { usePromptWorkspace } from "./workspace"
 import { usePromptMove } from "./move"
 import { readLocalAttachment } from "./local-attachment"
 import { useLocation } from "../../context/location"
+import { getCopyCommandState } from "../../util/transcript"
 
 registerOpencodeSpinner()
 
@@ -963,6 +964,23 @@ export function Prompt(props: PromptProps) {
     const trimmed = store.prompt.input.trim()
     if (trimmed === "exit" || trimmed === "quit" || trimmed === ":q") {
       void exit()
+      return true
+    }
+    const messageCount = props.sessionID ? sync.data.message[props.sessionID]?.length ?? 0 : 0
+    const copyState = getCopyCommandState(trimmed, messageCount)
+    if (store.mode !== "shell" && copyState.kind !== "none") {
+      if (copyState.kind === "invalid") {
+        toast.show({ message: "Message count must be a positive integer.", variant: "error" })
+        return true
+      }
+
+      if (copyState.kind === "noop") {
+        return true
+      }
+
+      move.startSubmit()
+      keymap.dispatchCommand("session.copy", { payload: copyState.count })
+      clearPrompt()
       return true
     }
     const selectedModel = local.model.current()
