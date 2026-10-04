@@ -1,4 +1,12 @@
-import { Audio, type AudioErrorContext, type AudioPlayOptions, type AudioSound, type AudioVoice } from "@opentui/core"
+import {
+  Audio,
+  type AudioErrorContext,
+  type AudioPlayOptions,
+  type AudioSound,
+  type AudioStreamBody,
+  type AudioStreamBodyOptions,
+  type AudioVoice,
+} from "@opentui/core"
 import { readFile } from "node:fs/promises"
 
 let audio: Audio | null | undefined
@@ -40,6 +48,14 @@ export function play(sound: AudioSound, options?: AudioPlayOptions) {
   if (!current) return null
   if (!current.isStarted() && !current.start()) return null
   return current.play(sound, options)
+}
+
+/** Plays streamed audio (MP3 or FLAC). Resolves once playback starts, or to null when no audio device is available. */
+export async function playStream(source: AudioStreamBody, options?: AudioStreamBodyOptions) {
+  const current = getAudio()
+  if (!current) return null
+  if (!current.isStarted() && !current.start()) return null
+  return current.playStream(source, options)
 }
 
 export function stopVoice(voice: AudioVoice) {

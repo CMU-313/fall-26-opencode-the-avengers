@@ -82,6 +82,7 @@ import { getRevertDiffFiles } from "../../util/revert-diff"
 import { OPENCODE_BASE_MODE, useBindings, useCommandShortcut, useOpencodeKeymap } from "../../keymap"
 import { usePathFormatter } from "../../context/path-format"
 import { LocationProvider } from "../../context/location"
+import { speak } from "../../speech"
 
 addDefaultParsers(parsers.parsers)
 
@@ -912,6 +913,24 @@ export function Session() {
           .then(() => toast.show({ message: "Message copied to clipboard!", variant: "success" }))
           .catch(() => toast.show({ message: "Failed to copy to clipboard", variant: "error" }))
         dialog.clear()
+      },
+    },
+    {
+      title: "Speak last response",
+      value: "session.speech",
+      category: "Session",
+      slash: {
+        name: "speech",
+      },
+      run: () => {
+      dialog.clear()
+        const last = messagesBeforeRevert().findLast((message) => message.role === "assistant")
+        const text = messagesBeforeRevert()
+          .filter((message) => message.role === "assistant" && message.parentID === last?.parentID)
+          .flatMap((message) => sync.data.part[message.id] ?? [])
+          .flatMap((part) => (part.type === "text" ? [part.text] : []))
+          .join("\n\n")
+        void speak(text)
       },
     },
     {
