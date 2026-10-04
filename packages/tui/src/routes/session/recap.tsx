@@ -17,11 +17,16 @@ export function SessionRecap(props: { sessionID: string }) {
     (sessionID) =>
       sdk.client.session
         .recap({ sessionID })
-        .then((result) => result.data ?? undefined)
+        .then((result) => result.data?.recap)
         .catch(() => undefined),
   )
 
-  createEffect(on(() => props.sessionID, () => setDismissed(false)))
+  createEffect(
+    on(
+      () => props.sessionID,
+      () => setDismissed(false),
+    ),
+  )
   // Hide for good once the user starts working again
   createEffect(() => {
     if (sync.data.session_status?.[props.sessionID]?.type === "busy") setDismissed(true)

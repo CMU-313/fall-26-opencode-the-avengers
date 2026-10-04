@@ -1277,7 +1277,8 @@ const scenarios: Scenario[] = [
       headers: ctx.headers(),
     }))
     .json(200, (body) => {
-      check(body === null, "a session with no stored recap should peek as null")
+      object(body)
+      check(body.recap === undefined, "a session with no stored recap should peek as absent")
     }),
   http.protected
     .get("/session/{sessionID}/diff", "session.diff")

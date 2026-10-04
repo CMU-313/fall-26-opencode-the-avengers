@@ -104,8 +104,13 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       query: typeof RecapQuery.Type
     }) {
       yield* requireSession(ctx.params.sessionID)
-      if (ctx.query.cached) return (yield* recapSvc.peek(ctx.params.sessionID)) ?? null
-      return yield* SessionError.mapStorageNotFound(recapSvc.get(ctx.params.sessionID))
+      if (ctx.query.cached) {
+        // Omit the key rather than setting it to undefined: an explicit
+        // undefined encodes as null, which contradicts the optional field.
+        const cached = yield* recapSvc.peek(ctx.params.sessionID)
+        return cached === undefined ? {} : { recap: cached }
+      }
+      return { recap: yield* SessionError.mapStorageNotFound(recapSvc.get(ctx.params.sessionID)) }
     })
 
     const diff = Effect.fn("SessionHttpApi.diff")(function* (ctx: {

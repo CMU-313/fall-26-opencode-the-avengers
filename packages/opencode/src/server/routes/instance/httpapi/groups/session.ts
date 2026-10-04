@@ -176,7 +176,11 @@ export const SessionApi = HttpApi.make("session")
         HttpApiEndpoint.get("recap", SessionPaths.recap, {
           params: { sessionID: SessionID },
           query: RecapQuery,
-          success: described(Schema.NullOr(SessionRecap.Result), "Session recap"),
+          // Wrapped in a struct with an optional field rather than returned as
+          // Schema.NullOr: the client generator drops the null from a
+          // top-level response schema, so callers were typed as always getting
+          // a recap even though cached=true returns nothing when none exists.
+          success: described(Schema.Struct({ recap: Schema.optional(SessionRecap.Result) }), "Session recap"),
           error: [HttpApiError.BadRequest, ApiNotFoundError],
         }).annotateMerge(
           OpenApi.annotations({
