@@ -289,4 +289,104 @@ describe.concurrent("core.share", () => {
 
     await Share.remove({ id: share.id, secret: share.secret })
   })
+
+  test("should add a viewer to a share", async () => {
+    const share = await Share.create({ sessionID: Identifier.descending() })
+
+    const viewer: Share.Viewer = {
+      id: "viewer-1",
+      name: "Viewer",
+    }
+
+    await Share.addViewer(share.id, viewer)
+
+    const viewers = await Share.viewers(share.id)
+
+    expect(viewers).toHaveLength(1)
+    expect(viewers[0]).toEqual(viewer)
+
+    await Share.remove({ id: share.id, secret: share.secret })
+  })
+
+  test("should add multiple viewers to a share", async () => {
+    const share = await Share.create({ sessionID: Identifier.descending() })
+
+    await Share.addViewer(share.id, {
+      id: "viewer-1",
+      name: "Viewer",
+    })
+
+    await Share.addViewer(share.id, {
+      id: "viewer-2",
+      name: "Viewer",
+    })
+
+    const viewers = await Share.viewers(share.id)
+
+    expect(viewers).toHaveLength(2)
+
+    await Share.remove({ id: share.id, secret: share.secret })
+  })
+
+  test("should remove a viewer from a share", async () => {
+    const share = await Share.create({ sessionID: Identifier.descending() })
+
+    await Share.addViewer(share.id, {
+      id: "viewer-1",
+      name: "Viewer",
+    })
+
+    expect(await Share.viewers(share.id)).toHaveLength(1)
+
+    await Share.removeViewer(share.id, "viewer-1")
+
+    expect(await Share.viewers(share.id)).toHaveLength(0)
+
+    await Share.remove({ id: share.id, secret: share.secret })
+  })
+
+  test("should not add the same viewer twice", async () => {
+    const share = await Share.create({ sessionID: Identifier.descending() })
+
+    const viewer: Share.Viewer = {
+      id: "viewer-1",
+      name: "Viewer",
+    }
+
+    await Share.addViewer(share.id, viewer)
+    await Share.addViewer(share.id, viewer)
+
+    const viewers = await Share.viewers(share.id)
+
+    expect(viewers).toHaveLength(1)
+
+    await Share.remove({ id: share.id, secret: share.secret })
+  })
+
+  test("should return no viewers for a share with no viewers", async () => {
+    const share = await Share.create({ sessionID: Identifier.descending() })
+
+    const viewers = await Share.viewers(share.id)
+
+    expect(viewers).toEqual([])
+
+    await Share.remove({ id: share.id, secret: share.secret })
+  })
+
+  test("should remove viewers when a share is removed", async () => {
+    const share = await Share.create({ sessionID: Identifier.descending() })
+
+    await Share.addViewer(share.id, {
+      id: "viewer-1",
+      name: "Viewer",
+    })
+
+    expect(await Share.viewers(share.id)).toHaveLength(1)
+
+    await Share.remove({ id: share.id, secret: share.secret })
+
+    expect(await Share.viewers(share.id)).toEqual([])
+  })
+
+
 })
