@@ -9760,7 +9760,9 @@ export type SessionRecapResponses = {
   /**
    * Session recap
    */
-  200: SessionRecap
+  200: {
+    recap?: SessionRecap
+  }
 }
 
 export type SessionRecapResponse = SessionRecapResponses[keyof SessionRecapResponses]
