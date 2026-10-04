@@ -21,6 +21,7 @@ import { Discovery } from "@/skill/discovery"
 import { Question } from "@/question"
 import { Permission } from "@/permission"
 import { Todo } from "@/session/todo"
+import { SessionRecap } from "@/session/recap"
 import { Session } from "@/session/session"
 import { SessionStatus } from "@/session/status"
 import { SessionRunState } from "@/session/run-state"
@@ -104,6 +105,7 @@ export const AppLayer = AppNodeBuilderV1.build(
     Worktree.node,
     Installation.node,
     ShareNext.node,
+    SessionRecap.node,
     SessionShare.node,
   ]),
 ).pipe(Layer.provideMerge(AppNodeBuilderV1.build(Ripgrep.node)), Layer.provideMerge(Observability.layer))

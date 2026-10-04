@@ -22,6 +22,7 @@ import { InstanceState } from "@/effect/instance-state"
 import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { HttpApiBuilder, HttpApiError, HttpApiSchema } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
+import { SessionRecap } from "@/session/recap"
 import {
   CommandPayload,
   DiffQuery,
@@ -30,11 +31,12 @@ import {
   ListQuery,
   MessagesQuery,
   PermissionResponsePayload,
-  PromptPayload,
   RevertPayload,
   ShellPayload,
   SummarizePayload,
   UpdatePayload,
+  RecapQuery,
+  PromptPayload,
 } from "../groups/session"
 import { PermissionNotFoundError } from "../errors"
 import * as SessionError from "./session-errors"
@@ -54,6 +56,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
     const compactSvc = yield* SessionCompaction.Service
     const runState = yield* SessionRunState.Service
     const agentSvc = yield* Agent.Service
+    const recapSvc = yield* SessionRecap.Service
     const permissionSvc = yield* Permission.Service
     const statusSvc = yield* SessionStatus.Service
     const todoSvc = yield* Todo.Service
@@ -94,6 +97,20 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
     const todo = Effect.fn("SessionHttpApi.todo")(function* (ctx: { params: { sessionID: SessionID } }) {
       yield* requireSession(ctx.params.sessionID)
       return yield* todoSvc.get(ctx.params.sessionID)
+    })
+
+    const recap = Effect.fn("SessionHttpApi.recap")(function* (ctx: {
+      params: { sessionID: SessionID }
+      query: typeof RecapQuery.Type
+    }) {
+      yield* requireSession(ctx.params.sessionID)
+      if (ctx.query.cached) {
+        // Omit the key rather than setting it to undefined: an explicit
+        // undefined encodes as null, which contradicts the optional field.
+        const cached = yield* recapSvc.peek(ctx.params.sessionID)
+        return cached === undefined ? {} : { recap: cached }
+      }
+      return { recap: yield* SessionError.mapStorageNotFound(recapSvc.get(ctx.params.sessionID)) }
     })
 
     const diff = Effect.fn("SessionHttpApi.diff")(function* (ctx: {
@@ -416,6 +433,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       .handle("get", get)
       .handle("children", children)
       .handle("todo", todo)
+      .handle("recap", recap)
       .handle("diff", diff)
       .handle("messages", messages)
       .handle("message", message)

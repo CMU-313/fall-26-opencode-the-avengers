@@ -205,6 +205,8 @@ import type {
   SessionPromptAsyncResponses,
   SessionPromptErrors,
   SessionPromptResponses,
+  SessionRecapErrors,
+  SessionRecapResponses,
   SessionRevertErrors,
   SessionRevertResponses,
   SessionShareErrors,
@@ -3659,6 +3661,40 @@ export class Session2 extends HeyApiClient {
     )
     return (options?.client ?? this.client).get<SessionTodoResponses, SessionTodoErrors, ThrowOnError>({
       url: "/session/{sessionID}/todo",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get session recap
+   *
+   * Retrieve a summary of the session, including key points and unfinished items.
+   */
+  public recap<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+      cached?: "true" | "false"
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "cached" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<SessionRecapResponses, SessionRecapErrors, ThrowOnError>({
+      url: "/session/{sessionID}/recap",
       ...options,
       ...params,
     })
