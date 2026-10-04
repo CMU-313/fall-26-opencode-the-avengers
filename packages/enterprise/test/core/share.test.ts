@@ -388,5 +388,42 @@ describe.concurrent("core.share", () => {
     expect(await Share.viewers(share.id)).toEqual([])
   })
 
+  test("should track 10 viewers", async () => {
+    const share = await Share.create({ sessionID: Identifier.descending() })
+
+    for (let i = 1; i <= 10; i++) {
+      await Share.addViewer(share.id, {
+        id: `viewer-${i}`,
+        name: "Viewer",
+      })
+    }
+
+    const viewers = await Share.viewers(share.id)
+
+    expect(viewers).toHaveLength(10)
+
+    await Share.remove({ id: share.id, secret: share.secret })
+  })
+
+  test("should allow a viewer to leave and join again", async () => {
+    const share = await Share.create({ sessionID: Identifier.descending() })
+
+    const viewer = {
+      id: "viewer-1",
+      name: "Viewer",
+    }
+
+    await Share.addViewer(share.id, viewer)
+    expect(await Share.viewers(share.id)).toHaveLength(1)
+
+    await Share.removeViewer(share.id, viewer.id)
+    expect(await Share.viewers(share.id)).toHaveLength(0)
+
+    await Share.addViewer(share.id, viewer)
+    expect(await Share.viewers(share.id)).toHaveLength(1)
+
+    await Share.remove({ id: share.id, secret: share.secret })
+  })
+
 
 })
