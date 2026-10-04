@@ -263,7 +263,6 @@ const layer = Layer.effect(
             ),
             prompt: PROMPT_SUMMARY,
           },
-          // added recap in agent dictionary
           recap: {
             name: "recap",
             mode: "primary",

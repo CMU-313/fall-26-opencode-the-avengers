@@ -3,7 +3,6 @@ import { Permission } from "@/permission"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 
 import { SessionRecap } from "@/session/recap"
-// added session recap so that it can be used in the session HTTP API
 import { Session } from "@/session/session"
 import { MessageV2 } from "@/session/message-v2"
 import { SessionPrompt } from "@/session/prompt"
@@ -43,7 +42,6 @@ export const DiffQuery = Schema.Struct({
   ...Struct.omit(SessionSummary.DiffInput.fields, ["sessionID"]),
 })
 
-// added recap query for session HTTP API
 export const RecapQuery = Schema.Struct({
   ...WorkspaceRoutingQueryFields,
   cached: Schema.optional(QueryBoolean),
@@ -174,7 +172,7 @@ export const SessionApi = HttpApi.make("session")
             summary: "Get session todos",
             description: "Retrieve the todo list associated with a specific session, showing tasks and action items.",
           }),
-        ), // added the http endpoint
+        ),
         HttpApiEndpoint.get("recap", SessionPaths.recap, {
           params: { sessionID: SessionID },
           query: RecapQuery,
