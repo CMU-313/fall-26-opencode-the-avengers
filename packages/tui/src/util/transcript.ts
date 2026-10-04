@@ -23,6 +23,30 @@ export type MessageWithParts = {
   parts: Part[]
 }
 
+export type CopyCommandState =
+  | { kind: "none" }
+  | { kind: "invalid" }
+  | { kind: "noop" }
+  | { kind: "copy"; count?: number }
+
+export function getCopyCommandState(input: string, messageCount: number): CopyCommandState {
+  const match = input.trim().match(/^\/copy(?:\s+([\s\S]+))?$/)
+  if (!match) return { kind: "none" }
+
+  if (match[1] === undefined) {
+    if (messageCount <= 0) return { kind: "noop" }
+    return { kind: "copy" }
+  }
+
+  const argument = match[1].trim()
+  if (messageCount <= 0) return { kind: "noop" }
+
+  const count = Number(argument)
+  if (!/^\d+$/.test(argument) || !Number.isSafeInteger(count) || count < 1) return { kind: "invalid" }
+
+  return { kind: "copy", count }
+}
+
 export function formatTranscript(
   session: SessionInfo,
   messages: MessageWithParts[],
