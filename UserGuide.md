@@ -1,4 +1,6 @@
-## Shared Conversation Tracking (implemented by Zoe Carpenter)
+## User Guide 
+
+## 1. Shared Conversation Tracking (implemented by Zoe Carpenter)
 
 The Shared Access Tracking feature allows the owner of a shared OpenCode conversation to see how many additional users are currently viewing the conversation.
 
@@ -75,7 +77,7 @@ These tests cover the main backend functionality added for Shared Access Trackin
 
 
 
-## Saving Assistant Responses as .md or .txt (implemented by Katherine Geng) 
+## 2. Saving Assistant Responses as .md or .txt (implemented by Katherine Geng) 
 
 This feature lets you save a single AI response from Opencode interface to a file, either as Markdown (`.md`) or plain text (`.txt`). 
 
@@ -168,30 +170,7 @@ There are a few tests I couldn’t automate so I tested them manually in the int
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# User Guide (implemented by Willie Yang)
-
-## Read the last assistant response aloud
+## 3. Read the last assistant response aloud (implemented by Willie Yang)
 
 The terminal interface provides **Speak last response**, also available as `/speech`.
 It reads the text of the latest assistant turn, including multiple assistant messages
@@ -345,12 +324,7 @@ The command's uncaught speech rejection remains a documented implementation limi
 
 
 
-
-
-
-User guide – Session Recap (Wunwan Boonsitanara)
-
-## Session History Recap (implemented by Wunwan Boonsitanara)
+## 4. Session History Recap (implemented by Wunwan Boonsitanara)
 
 When you reopen a conversation, a recap appears above the prompt so you can pick
 up where you left off:
