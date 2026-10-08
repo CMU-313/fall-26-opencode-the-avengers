@@ -84,7 +84,7 @@ These tests cover the main backend functionality added for Shared Access Trackin
 
 `OPENCODE_STORAGE_ADAPTER=memory bun test ./test/core/share.test.ts`
 
-
+---
 
 ## 2. Saving Assistant Responses as .md or .txt (implemented by Katherine Geng) 
 
@@ -177,7 +177,7 @@ There are a few tests I couldn’t automate so I tested them manually in the int
 - **"Open without saving"** depends on your system's text editor, so it's checked by hand.
 
 
-
+---
 
 ## 3. Read the last assistant response aloud (implemented by Willie Yang)
 
@@ -331,7 +331,7 @@ real sound output, Microsoft's endpoint, and command-palette/slash-input interac
 The command's uncaught speech rejection remains a documented implementation limitation.
 
 
-
+---
 
 ## 4. Session History Recap (implemented by Wunwan Boonsitanara)
 
