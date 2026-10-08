@@ -1,5 +1,14 @@
 ## User Guide 
 
+## Table of Contents
+
+1. [Shared Conversation Tracking — Zoe Carpenter](#1-shared-conversation-tracking-implemented-by-zoe-carpenter)
+2. [Saving Assistant Responses as .md or .txt — Katherine Geng](#2-saving-assistant-responses-as-md-or-txt-implemented-by-katherine-geng)
+3. [Read the Last Assistant Response Aloud — Willie Yang](#3-read-the-last-assistant-response-aloud-implemented-by-willie-yang)
+4. [Session History Recap — Wunwan Boonsitanara](#4-session-history-recap-implemented-by-wunwan-boonsitanara)
+
+---
+
 ## 1. Shared Conversation Tracking (implemented by Zoe Carpenter)
 
 The Shared Access Tracking feature allows the owner of a shared OpenCode conversation to see how many additional users are currently viewing the conversation.
