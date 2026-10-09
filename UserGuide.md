@@ -2,49 +2,42 @@
 
 ## Read the last assistant response aloud
 
-The terminal interface provides **Speak last response**, also available as `/speech`.
-It reads the text of the latest assistant turn, including multiple assistant messages
-belonging to the same user prompt. It skips user messages, reasoning, and tool output.
-Messages hidden by an undo/revert are excluded.
+The terminal has a **Speak last response** command, which can also be used by typing `/speech`.
 
-### Requirements and use
+This command reads out the most recent response from the assistant. If the assistant response has multiple parts, it will read all of them in order. It will not read the user's messages, reasoning, tool output, or messages that were removed with undo/revert.
 
-1. Run OpenCode locally on a computer with working audio output and turn up the volume.
-   A headless Docker container or SSH host may have no usable audio device.
-2. Keep an Internet connection available. Speech synthesis uses Microsoft's Edge
-   Read Aloud service and sends the cleaned response text to that service. No API key
-   is required by this implementation. The endpoint is undocumented and may change.
-3. Open a session, send a prompt, and wait for an assistant response.
-4. Enter `/speech` and select/submit the command, or open the command palette and
-   choose **Speak last response**.
-5. Listen for the latest response. Playback begins as MP3 audio becomes available;
-   longer responses are downloaded in successive chunks.
-6. Run `/speech` again (or choose **Speak last response** again) to stop the current
-   reading, including while it is loading. Invoke it once more to read the latest
-   response from the beginning. This is stop/restart, not pause/resume. No new UI
-   controls or labels are added.
+### How to use it
 
-Markdown is converted to spoken text: headings and list items get pauses, links use
-labels (bare URLs become “link”), tables become comma-separated cells, and fenced
-code becomes “Code block omitted.” Inline code retains its text. Speech uses the
-English-US Ava multilingual neural voice; this command has no voice selector.
+1. Run OpenCode on a computer that has working speakers or headphones.
+2. Make sure you have an Internet connection because the speech uses Microsoft's Edge Read Aloud service.
+3. Send a prompt and wait for the assistant to respond.
+4. Type `/speech`, or open the command palette and choose **Speak last response**.
+5. The assistant response should start playing as audio.
+6. If you use `/speech` again while it is playing, it will stop. If you use it one more time, it starts the response again from the beginning.
 
-### Manual user verification
+This works more like stop and restart instead of pause and resume.
 
-| Check                       | Steps                                                                                                    | Expected result                                                                                     |
-| --------------------------- | -------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| Basic playback              | Ask for a short plain-text greeting, then run `/speech`.                                                 | Hear that greeting; the command dialog closes.                                                      |
-| Command palette             | Choose **Speak last response** from the palette.                                                         | Hear the same response as with `/speech`.                                                           |
-| Markdown                    | Ask for a heading, checklist, link, table, and fenced code sample.                                       | Hear readable text, pauses between lines, table cells, and “Code block omitted”; no raw code block. |
-| Latest turn                 | Ask two different questions, then run `/speech`.                                                         | Hear the second answer, not the first answer or either user prompt.                                 |
-| Multiple assistant segments | Use a response with intermediate tool calls and multiple text segments.                                  | Hear all text segments for that turn in order, excluding tool results and reasoning.                |
-| Undo/revert                 | Undo the newest turn, then run `/speech`.                                                                | Hear the latest assistant response still visible before the revert point.                           |
-| Long response               | Request a response longer than 4,096 bytes, then run `/speech`.                                          | Hear the complete response across chunk boundaries; confirm actual audio continuity by listening.   |
-| Service/device failure      | In a disposable session, disconnect the network or run without an audio device, then invoke the command. | Speech cannot start; see the limitations below. Restore the connection/device afterward.            |
+The command also cleans up Markdown before reading it. For example, headings and lists will have pauses, links will read their names instead of the full URL, tables are read as normal text, and code blocks are skipped by saying "Code block omitted." The current voice is the English-US Ava voice and there is no option to change it right now.
 
-### Automated tests
+## Manual testing
 
-Run from the repository root:
+There are a few things that should be manually tested.
+
+For basic playback, ask the assistant for a short sentence and then run `/speech`. You should hear the same sentence.
+
+You should also test the command palette and make sure **Speak last response** does the same thing as `/speech`.
+
+For Markdown, ask the assistant to create something with a heading, list, link, table, and code block. The speech should make all of these understandable instead of reading the raw Markdown.
+
+You should also ask two different questions and then use `/speech`. It should only read the newest assistant response.
+
+For a long response, make sure the whole response plays even if it has to be split into multiple audio chunks.
+
+You should also test stopping and restarting the speech and test what happens when there is no Internet or working audio device.
+
+## Automated testing
+
+From the repository root, run:
 
 ```sh
 cd packages/tui
@@ -52,101 +45,57 @@ bun test ./test/tts.ts
 bun typecheck
 ```
 
-Run the broader TUI regression suite from `packages/tui`:
+You can also run the normal TUI test suite with:
 
 ```sh
 bun run test
 ```
 
-All feature tests and their transport fixture are in [tts.ts](packages/tui/test/tts.ts).
+One important thing is that `tts.ts` is not automatically found by Bun because the file name does not end in `.test` or `.spec`. Because of this, `bun test ./test/tts.ts` has to be run directly.
 
-| Test group                   | Coverage and rationale                                                                                                                                                                                                                                                                                                                                                                     |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `speakable` and `edgeChunks` | Markdown cleanup, closed and unfinished code fences, empty input, sentence packing, XML expansion, UTF-8 byte counting, exact boundaries, and large inputs. Exercises the actual exported functions.                                                                                                                                                                                       |
-| Speech transport             | Re-runs this same file in a separate Bun process. Exercises the real `speak` implementation, configuration/SSML frames, XML escaping, authentication/header shapes, binary payload parsing, ordered multi-chunk delivery, cancellation, early close, connection errors, unavailable audio, wrapped playback errors, stop/restart, cancellation during startup, and stale completion races. |
-| `playStream`                 | Lazy device creation, startup, reuse, exact source/options forwarding, unavailable hardware, playback errors, startup resolution timing, and disposal/reinitialization.                                                                                                                                                                                                                    |
-| `session.speech`             | Executes the actual command expression and revert selector extracted with TypeScript's parser. Checks command metadata, latest-turn selection, multi-part ordering, filtering, trailing user messages, missing parts, and revert boundaries. No selection logic is copied into the tests.                                                                                                  |
+The tests check things such as cleaning up Markdown, breaking large responses into chunks, sending requests to the speech service, playing the audio, stopping and restarting the audio, and making sure the correct assistant response is selected.
 
-**Test discovery:** Bun does not automatically discover `tts.ts` because its name
-has no `.test` or `.spec` suffix. Always run `bun test ./test/tts.ts` explicitly.
-The existing `bun run test` command and CI workflow do not include this file
-automatically. To include it in CI, add that explicit command with
-`packages/tui` as the working directory. No package or workflow files were changed,
-all tests remain in this single `tts.ts` file. Playback toggling is implemented
-in `speech.ts`; the audio wrapper and UI files are unchanged.
+The tests fake things such as the Internet connection and audio device so that the automated tests do not depend on Microsoft's real server or actual speakers. Because of this, automated tests can show that our code is working, but they cannot prove that the actual voice sounds correct or that Microsoft's service is currently working.
 
-Only external boundaries are replaced: the speech WebSocket and audio engine, plus
-command dependencies in the focused command harness. This keeps automated runs
-independent of Internet access and sound hardware. The unavoidable WebSocket global
-replacement and module mock are isolated in a child process to avoid contaminating
-other tests. Audio spies are restored and the singleton is disposed after each test.
+## Sprint 1 acceptance criteria
 
-These tests cover the feature's transformations, service framing, playback wrapper,
-and command selection behavior. They do **not** certify Microsoft's live endpoint,
-actual sound quality, or renderer-level slash-command/palette interaction; use the
-manual checks above for those. The command harness runs production expressions but
-does not mount the full Session component.
+This feature is assigned to **Willie** and was estimated to take around **8–12 hours** with **High** complexity.
 
-### Sprint 1 acceptance criteria
+The main requirements are:
 
-Assigned to **Willie**; estimated effort **8–12 hours**; complexity **High**.
-Dependencies: completed assistant response text, a text-to-speech service, and UI
-controls to start and stop playback.
+- Convert the assistant response into audio.
+- Make sure the user hears the correct response.
+- Allow the user to stop and start the playback.
+- Make sure OpenCode still works normally when TTS is not being used.
 
-| Acceptance criterion                         | Verification                                                                                                                                                                                                                                                                                                                                                                         | Current status                                                                                                                                                                       |
-| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Convert the requested AI response into audio | Command tests check the exact latest-turn text; transport and playback tests check SSML, audio payloads, and playback startup.                                                                                                                                                                                                                                                       | Automated boundary checks pass; live synthesis still needs manual verification.                                                                                                      |
-| User hears the correct words                 | On a local machine, ask for “The blue bicycle has two wheels.” Wait for completion, run `/speech`, and compare what you hear with the visible answer. Then request a different answer and repeat to confirm the latest response is read.                                                                                                                                             | Manual listening test not yet performed. Mock audio cannot prove audibility or pronunciation.                                                                                        |
-| User can stop and start playback             | Start a long response with `/speech`; invoke `/speech` again and verify silence. Invoke it once more and verify reading starts from the beginning. Repeat the stop while audio is still loading.                                                                                                                                                                                     | Implemented through the existing command. Automated toggle, startup-cancellation, natural-completion, and stale-completion tests pass; audible manual verification remains required. |
-| OpenCode remains functional without TTS      | The new inactive-command test verifies no speech call, dialog clearing, or audio-device creation when the command is unused. Existing lifecycle-export, runtime/rendering, keymap, and clipboard tests serve as broader controls. Manually send two ordinary prompts, read both answers, and navigate the session without invoking `/speech`; confirm normal behavior and no speech. | Automated controls are separate from an end-to-end live prompt test; manual control check not yet performed.                                                                         |
+Most of these behaviors are already covered by automated tests. However, actual audio still needs to be manually tested on a real computer because a fake audio device cannot prove that the user can actually hear the sound.
 
-Run the existing control tests alongside the feature tests from `packages/tui`:
+The user should also manually make sure that OpenCode works normally without ever using `/speech`.
 
-```sh
-bun test ./test/tts.ts test/index.test.tsx test/runtime.test.tsx test/keymap.test.tsx test/clipboard.test.ts
-```
+## Known limitations
 
-The stop/start TODO has been replaced with executable tests. The existing command
-still calls `speak`; that function now toggles its own playback state using the audio
-library’s cancellation signal. No UI code or layout changes were needed.
+There are still a few limitations with the feature.
 
-### Known limitations and follow-up
+If the speech service is unavailable, the response is empty, or the computer does not have an audio device, the command can cause an error instead of showing a nice error message.
 
-- The command calls `void speak(text)` without catching rejection. An empty response,
-  unreachable service, or unavailable device can produce an unhandled rejection
-  rather than a friendly error toast. Empty-content delegation is characterized by
-  the command test; friendly error handling is not claimed as passing behavior.
-- Cancellation prevents later chunks from downloading; it does not immediately
-  close the current synthesis socket. The existing `/speech` command now toggles
-  playback off immediately through the audio library’s abort signal.
-- Playback starts over after stopping; it does not resume from the previous position.
-  Confirm audible stop/restart on a machine with working sound before submission.
-- Local test results are separate from hosted CI. Confirm the feature branch's
-  GitHub checks are green before merging, and ensure CI explicitly runs
-  `bun test ./test/tts.ts` as described above.
+Stopping playback will stop the audio, but it may not immediately close the current connection to the speech service.
 
-### Local verification record
+When the speech is stopped and started again, it starts from the beginning instead of continuing from where it stopped.
 
-Verified on macOS with Bun 1.4.2 on October 1, 2026:
+The feature also still needs to be manually tested with real speakers before submission.
 
-- Feature suite plus existing control tests after acceptance-criteria alignment:
-  **52 passed, 0 failed**, plus 14 passing transport/toggle cases in the subprocess. This includes the
-  subprocess wrapper; transport/toggle cases run inside that subprocess.
-- Isolated transport/toggle fixture: **14 passed, 0 failed** (also run by that wrapper).
-- Before consolidation, full TUI suite: **234 passed, 1 skipped, 0 failed**, including 8 snapshots.
-  The renamed `tts.ts` requires its separate explicit run; see test discovery above.
-- `bun typecheck`: passed.
-- Prettier checks for the new tests and this guide: passed.
-- Only `speech.ts` changed in production code. `audio.ts`, `src/index.tsx`, and the
-  session screen’s `index.tsx` remain unchanged.
+Finally, the GitHub CI checks should be checked before merging because the local tests do not guarantee that the hosted CI tests will also pass.
 
-The full suite needed filesystem access for existing state/snapshot tests. It emitted
-missing fixture KV-state warnings but completed successfully. Hosted CI and audible
-manual checks were not performed.
+## Local testing results
 
-Suggested PR verification explanation: automated tests execute the existing speech
-transformations, transport framing, playback wrapper, and session command selection.
-Boundary fakes make the checks deterministic without network or audio hardware. The
-full TUI suite and package typecheck pass locally. Manual checks remain necessary for
-real sound output, Microsoft's endpoint, and command-palette/slash-input interaction.
-The command's uncaught speech rejection remains a documented implementation limitation.
+The feature was tested on macOS with Bun 1.4.2 on October 1, 2026.
+
+The feature and control tests had **52 passed and 0 failed**, with another **14 transport and toggle tests passing** in a separate process.
+
+The full TUI test suite previously had **234 passed, 1 skipped, and 0 failed**.
+
+`bun typecheck` also passed, and the Prettier checks passed.
+
+Only `speech.ts` was changed for the actual production code. The other audio and UI files were not changed.
+
+The main thing that still needs to be tested is the real audio output, Microsoft's actual speech service, and using the command through the real command palette and `/speech` input.
