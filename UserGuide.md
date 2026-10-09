@@ -6,7 +6,7 @@
 2. [Saving Assistant Responses as .md or .txt — Katherine Geng](#2-saving-assistant-responses-as-md-or-txt-implemented-by-katherine-geng)
 3. [Read the Last Assistant Response Aloud — Willie Yang](#3-read-the-last-assistant-response-aloud-implemented-by-willie-yang)
 4. [Session History Recap — Wunwan Boonsitanara](#4-session-history-recap-implemented-by-wunwan-boonsitanara)
-5. [/copy [x] — Toby Yang](#5-copy-x-implemented-by-toby-yang)
+5. [Transcript Copy Control — Toby Yang](#5-transcript-copy-control-implemented-by-toby-yang)
 
 ---
 
@@ -434,9 +434,9 @@ Line coverage for src/session/recap.ts is 100%.
 
 ---
 
-## 5. /copy [x] (implemented by Toby Yang)
+## 5. Transcript Copy Control (implemented by Toby Yang)
 
-The `/copy` command lets you copy a transcript to your clipboard from the prompt bar.
+The copy command lets you copy a transcript to your clipboard from the prompt bar using the `/copy` shortcut, with optional limiting to the most recent messages.
 
 ### How to use it
 
