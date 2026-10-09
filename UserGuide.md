@@ -6,6 +6,7 @@
 2. [Saving Assistant Responses as .md or .txt — Katherine Geng](#2-saving-assistant-responses-as-md-or-txt-implemented-by-katherine-geng)
 3. [Read the Last Assistant Response Aloud — Willie Yang](#3-read-the-last-assistant-response-aloud-implemented-by-willie-yang)
 4. [Session History Recap — Wunwan Boonsitanara](#4-session-history-recap-implemented-by-wunwan-boonsitanara)
+5. [/copy [x] — Toby Yang](#5-copy-x-implemented-by-toby-yang)
 
 ---
 
@@ -430,3 +431,74 @@ Line coverage for src/session/recap.ts is 100%.
 - **Summary quality** — whether the **Completed** list reads sensibly — since it
   varies by model. The tests only assert that whatever comes back is handled
   safely.
+
+---
+
+## 5. /copy [x] (implemented by Toby Yang)
+
+The `/copy` command lets you copy a transcript to your clipboard from the prompt bar.
+
+### How to use it
+
+- `/copy` copies the full conversation transcript.
+- `/copy 5` copies only the last 5 messages.
+- `/copy x` accepts only a positive integer value for `x`.
+
+Examples:
+
+- `/copy` → copies the entire transcript
+- `/copy 3` → copies the most recent 3 messages
+- `/copy 10` → copies the most recent 10 messages, or the full transcript if there are fewer than 10
+
+### How to user test it
+
+**Setup**
+
+1. Open a session with at least one message.
+2. Enter a slash command in the prompt bar.
+3. Use a model or local session history to generate multiple assistant and user messages.
+
+**Test cases**
+
+| # | Steps | Expected result |
+|---|---|---|
+| 1 | Type `/copy` and submit | The entire transcript is copied to the clipboard |
+| 2 | Type `/copy 3` with more than 3 messages | Only the last 3 messages are copied |
+| 3 | Type `/copy 10` with fewer than 10 messages | Whatever messages exist are copied, without failure |
+| 4 | Type `/copy 0` in a non-empty session | Error message shown: "Message count must be a positive integer." |
+| 5 | Type `/copy -1` or `/copy abc` | Error message shown: "Message count must be a positive integer." |
+| 6 | Type `/copy 1` in an empty session | No prompt is submitted and no copy action runs |
+| 7 | Type `/copy 0` in an empty session | No prompt is submitted and no copy action runs |
+| 8 | Type the same `/copy x` command multiple times | It behaves the same each time and does not leave stale prompt text behind |
+
+### Automated tests
+
+The copy command behavior is covered in `packages/tui/test/` by transcript and prompt-interception tests.
+
+Run them with:
+
+```bash
+cd packages/tui
+bun test
+```
+
+**What is being tested**
+
+- `/copy` still copies the full transcript
+- `/copy x` copies only the last `x` messages
+- `/copy` with fewer than `x` messages copies only the available history
+- invalid values like `/copy 0`, `/copy -1`, or `/copy abc` are rejected
+- empty-session cases are treated as a no-op rather than submitting the command as prompt text
+- valid commands clear the prompt correctly after dispatching the copy action
+- repeated `/copy x` calls remain stable and do not change the behavior
+
+**Why these tests are sufficient**
+
+These tests cover the main behaviors of the feature at both the logic layer and the real prompt-submission layer. The transcript tests cover parsing and formatting, while the prompt tests verify the actual user-facing behavior: the command is intercepted before normal prompt submission, and valid commands clear the prompt bar cleanly. This combination checks both the underlying copy logic and the UI interaction that users actually see.
+
+### Known behavior and edge cases
+
+- If the session is empty, `/copy` and `/copy x` are treated as silent no-ops.
+- If the session is not empty but the count is invalid, the user sees an error and the command is not sent as normal prompt text.
+- Valid copy commands are handled before prompt submission and are removed from the prompt bar automatically.
+- The feature is intentionally designed to prevent the command from being sent into the conversation as a visible message.
