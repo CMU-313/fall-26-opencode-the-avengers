@@ -35,9 +35,10 @@ test("R2: a new file reads back exactly what was written", async () => {
 
 // R3: Canceling a save (declining the overwrite prompt) must not modify an existing file.
 // Kind: invariant
+// A dismissed dialog resolves undefined rather than false, so both count as declining.
 test("R3: declining overwrite leaves the existing file unchanged", async () => {
   await fc.assert(
-    fc.asyncProperty(content, content, async (original, replacement) => {
+    fc.asyncProperty(content, content, fc.constantFrom(false, undefined), async (original, replacement, answer) => {
       await using tmp = await tmpdir()
       const filepath = path.join(tmp.path, "answer.md")
       await Bun.write(filepath, original)
@@ -45,7 +46,7 @@ test("R3: declining overwrite leaves the existing file unchanged", async () => {
         directory: tmp.path,
         filename: "answer.md",
         content: replacement,
-        confirmOverwrite: async () => false,
+        confirmOverwrite: async () => answer,
       })
       return written === false && (await Bun.file(filepath).text()) === original
     }),

@@ -35,5 +35,7 @@ All properties share one content generator. It mixes three sources: arbitrary st
 
 ## Notes
 
+- R6 holds for `writeResponseFile`, but the `/save` caller in `routes/session/index.tsx` does not pass `timestamp` yet, so users cannot get a timestamped file from the UI. Passing it unconditionally would put a header into every save, which contradicts R5 and the existing save tests, so it needs an opt-in choice in the save dialog. That is left as follow-up work.
+- R3 covers both `false` and `undefined` from the prompt, because dismissing the dialog resolves `undefined`.
 - R4 has no property because it cannot be checked at the `writeResponseFile` level. It is revised, not tested.
 - The properties were drafted with AI assistance and reviewed by me for correctness and traceability to the requirements above.
