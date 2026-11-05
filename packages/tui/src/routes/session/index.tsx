@@ -67,9 +67,9 @@ import { useEpilogue } from "../../context/epilogue"
 import { normalizePath } from "../../util/path"
 import { PermissionPrompt } from "./permission"
 import { QuestionPrompt } from "./question"
-import { DialogExportOptions } from "../../ui/dialog-export-options"
+import { DialogExportOptions, type ExportOptions } from "../../ui/dialog-export-options"
 import * as Model from "../../util/model"
-import { formatResponse, formatTranscript, parseResponseFilename } from "../../util/transcript"
+import { formatResponse, formatTranscript, hasResponseText, parseResponseFilename } from "../../util/transcript"
 import { writeResponseFile } from "../../util/response-file"
 import { sessionEpilogue } from "../../util/presentation"
 import { setPreLayoutSiblingMargin } from "../../util/layout"
@@ -359,25 +359,31 @@ export function Session() {
   const dialog = useDialog()
   const renderer = useRenderer()
 
+  // What the user had entered when they cancelled the save dialog, restored when they reopen it for that message.
+  const saveDrafts = new Map<string, ExportOptions>()
+
   const saveResponse = async (message: AssistantMessage) => {
     const parts = sync.data.part[message.id] ?? []
-    if (!parts.some((part) => part.type === "text" && !part.synthetic && part.text.trim())) {
+    if (!hasResponseText(parts)) {
       toast.show({ message: "No text content found in assistant response", variant: "error" })
       dialog.clear()
       return
     }
     try {
+      const draft = saveDrafts.get(message.id)
       const options = await DialogExportOptions.show(
         dialog,
         // Message IDs share a time-ordered prefix, so the suffix keeps default names distinct.
-        `response-${message.id.slice(-8)}.md`,
-        showThinking(),
-        showDetails(),
-        showAssistantMetadata(),
-        false,
+        draft?.filename ?? `response-${message.id.slice(-8)}.md`,
+        draft?.thinking ?? showThinking(),
+        draft?.toolDetails ?? showDetails(),
+        draft?.assistantMetadata ?? showAssistantMetadata(),
+        draft?.openWithoutSaving ?? false,
         "Save Response",
+        (values) => saveDrafts.set(message.id, values),
       )
       if (options === null) return
+      saveDrafts.delete(message.id)
       const target = parseResponseFilename(options.filename)
       if (!target) {
         toast.show({ message: "Filename must end in .md or .txt", variant: "error" })
