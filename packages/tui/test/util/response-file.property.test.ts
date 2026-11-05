@@ -4,7 +4,16 @@ import fc from "fast-check"
 import { tmpdir } from "../fixture/fixture"
 import { writeResponseFile } from "../../src/util/response-file"
 
-const content = fc.string()
+// Generator for response content. We mix plain strings with markdown-shaped
+// fragments (headings, list items, fenced code blocks, empty strings, blank
+// lines) so the properties actually exercise the structure the interviews
+// cared about: markdown must survive (C-5, S-1) and nothing extra is added
+// (C-2, O-2).
+const content = fc.oneof(
+  fc.string(),
+  fc.constantFrom("# Heading\n", "- item\n", "```\ncode\n```\n", "", "\n\n"),
+  fc.array(fc.constantFrom("# H\n", "- a\n", "text\n", "```\nx\n```\n")).map((xs) => xs.join("")),
+)
 
 // R2: Saving preserves the response content exactly, so markdown structure survives.
 // Kind: round-trip
