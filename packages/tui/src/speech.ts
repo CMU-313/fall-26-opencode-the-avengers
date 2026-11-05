@@ -142,7 +142,9 @@ function edgeSsml(text: string) {
 /** Splits text into requests at sentence boundaries, keeping each request's escaped text under the byte limit. */
 export function edgeChunks(text: string, limit = EDGE_CHUNK_BYTES) {
   const size = (value: string) => Buffer.byteLength(escapeXml(value))
-  return (text.match(/[^.!?]+(?:[.!?]+|$)\s*/g) ?? [])
+  // A sentence ends at . ! or ? followed by whitespace or the end of the text, so every character lands in a sentence
+  // and words like ".env", "Node.js" and "3.14" are never cut in two.
+  return (text.match(/\S[\s\S]*?(?:[.!?](?=\s|$)|$)\s*/g) ?? [])
     .flatMap((sentence) => (size(sentence) <= limit ? [sentence] : (sentence.match(/\S{1,400}\s*/g) ?? [])))
     .reduce<string[]>((chunks, piece) => {
       const last = chunks.at(-1)
@@ -160,28 +162,44 @@ function escapeXml(text: string) {
 
 const XML_ENTITIES: Record<string, string> = { "&": "amp", "<": "lt", ">": "gt", '"': "quot", "'": "apos" }
 
+/** Replacer for **bold**, __bold__ and ~~strikethrough~~ that also unwraps markers nested inside, like ~~**x**~~. */
+function unwrapStrong(_match: string, _marker: string, inner: string): string {
+  return inner.replace(/(\*\*|__|~~)(.+?)\1/g, unwrapStrong)
+}
+
 /** Turns markdown into text that sounds natural when read aloud. */
 export function speakable(markdown: string) {
+  // Inline code is read as written: it is set aside while markdown syntax is stripped, so "__init__" or "**kwargs"
+  // aren't mistaken for bold, and put back afterwards. Control characters are replaced first, so the \u0000 placeholders
+  // can't collide with the reply's own text.
+  const code: string[] = []
   return (
     markdown
       // Control characters (other than tab and newlines) that the speech service rejects.
       .replace(/[^\P{Cc}\t\n\r]/gu, " ")
+      // Quote markers go first (all of them, for nested quotes), so headings, lists and code inside a quote are
+      // cleaned like any other.
+      .replace(/^[ \t]*(?:>[ \t]?)+/gm, "")
       // Code is unintelligible when read aloud. Also matches a fence that is still streaming.
       .replace(/^[ \t]*(```|~~~)[^\n]*(?:\n[\s\S]*?(?:^[ \t]*\1[ \t]*$|(?![\s\S]))|$)/gm, "\nCode block omitted.\n")
       .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
       .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
       .replace(/<https?:\/\/[^>\s]+>|https?:\/\/[^\s)>\]]+/g, "link")
       .replace(/<\/?[a-z][^>]*>/gi, "")
-      .replace(/`+([^`]+)`+/g, "$1")
+      .replace(/`+([^`]+)`+/g, (_, content: string) => `\u0000${code.push(content) - 1}\u0000`)
       .replace(/^[ \t]*(?:[-*_][ \t]*){3,}$/gm, "")
       .replace(/^[ \t]*\|?(?:[ \t]*:?-+:?[ \t]*\|)+[ \t]*(?::?-+:?)?[ \t]*$/gm, "")
       .replace(/^[ \t]*#{1,6}[ \t]+/gm, "")
-      .replace(/^[ \t]*>[ \t]?/gm, "")
-      .replace(/^[ \t]*(?:[-*+]|\d+[.)])[ \t]+(?:\[[ xX]\][ \t]+)?/gm, "")
-      .replace(/(\*\*|__|~~)(.+?)\1/g, "$2")
+      // A list marker needs text after it; otherwise "42." followed by stray spaces would be dropped as an empty item.
+      .replace(/^[ \t]*(?:[-*+]|\d+[.)])[ \t]+(?:\[[ xX]\][ \t]+)?(?=\S)/gm, "")
+      .replace(/(\*\*|__|~~)(.+?)\1/g, unwrapStrong)
       .replace(/(^|[^\w*])[*_]([^*_\s](?:[^*_\n]*[^*_\s])?)[*_](?![\w*])/g, "$1$2")
+      // oxlint-disable-next-line no-control-regex -- matches only the placeholders above; the text has no other NULs
+      .replace(/\u0000(\d+)\u0000/g, (_, index: string) => code[Number(index)])
       .replace(/\p{Extended_Pictographic}\uFE0F?/gu, "")
       .split("\n")
+      // Extra spaces and tabs are formatting, not speech: collapse each run to one space.
+      .map((line) => line.replace(/\s+/g, " "))
       // Table rows become comma separated cells.
       .map((line) =>
         line.trim().startsWith("|")
