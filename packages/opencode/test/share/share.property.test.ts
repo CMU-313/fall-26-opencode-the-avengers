@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import fc from 'fast-check';
 import { Share } from "../../../enterprise/src/core/share";
 
-process.env.OPENCODE_STORAGE_ADAPTER = "memory"
+// process.env.OPENCODE_STORAGE_ADAPTER = "memory"
 
 // Constructor for active viewers 
 const viewers = fc.uniqueArray(fc.uuid(), {minLength: 1, maxLength: 15,}).map((ids) => ids.map((id) => ({id, name: "Viewer",})));
