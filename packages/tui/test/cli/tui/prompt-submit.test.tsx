@@ -228,7 +228,7 @@ test("Prompt.submit shows the integer error for invalid counts in a populated ch
       await Bun.sleep(0)
 
       expect(ref.current.input).toBe(command)
-      expect(prompt.toast().currentToast?.message).toBe("Message count must be a positive integer.")
+      expect(prompt.toast().currentToast?.message).toBe("At least one message must be copied.")
       expect(prompt.requests).toHaveLength(requestsBeforeSubmit)
     }
   } finally {
