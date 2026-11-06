@@ -159,8 +159,9 @@ export default function () {
     const shareID = params.shareID
     if (!shareID) return
 
-    viewerID = localStorage.getItem("viewer-id") ?? crypto.randomUUID()
-    localStorage.setItem("viewer-id", viewerID)
+    // viewerID = localStorage.getItem("viewer-id") ?? crypto.randomUUID()
+    // localStorage.setItem("viewer-id", viewerID)
+    viewerID = crypto.randomUUID()
 
     const viewer = {
       id: viewerID,
