@@ -86,9 +86,10 @@ const replyText = fc
   .map((parts) => parts.join(" "))
 
 describe("R1: the whole reply is sent, in order, in requests the speech service accepts", () => {
-  // R1 (revised in P4): Read-aloud sends the reply's speakable text to the voice as an ordered series of requests,
-  // each at most 4,096 bytes after XML escaping, that joined back together give the text exactly: no word skipped,
-  // repeated, added or reordered, and no word of 400 characters or fewer split between two requests.
+  // R1 (revised in P4): Read-aloud should read the whole reply in order. The text is split into requests that are each
+  // 4,096 bytes or less, and joining them back together should give the same text, so no words get skipped, repeated,
+  // added, or cut in half (unless one "word" is over 400 characters, like a long hash). It only stops early if the user
+  // stops it or the speech service fails.
   // Kind: round-trip (split the text into requests, join them back, get the original text) + invariant (request size).
   test("R1: splitting a reply into requests and joining them back gives the original text", () => {
     fc.assert(
@@ -148,10 +149,10 @@ const token = fc.oneof(
 const replyLines = fc.array(fc.array(token, { minLength: 1, maxLength: 10 }), { minLength: 1, maxLength: 4 })
 
 describe("R2: every word is read, with only the listed substitutions", () => {
-  // R2 (revised in P4): The text sent to the voice keeps every word of the reply, unchanged and in order. The only
-  // changes allowed are: a link or image is read as its label, a bare URL is read as "link", a fenced code block becomes
-  // "Code block omitted.", markdown formatting, HTML tags and emoji are dropped, and each line ends with punctuation.
-  // Inline code is read exactly as written. Nothing is autocorrected.
+  // R2 (revised in P4): The text sent to the voice should keep every word of the reply in the same order. The only
+  // changes allowed are: links and images are read as their label, bare URLs are read as "link", code blocks become
+  // "Code block omitted.", markdown, HTML tags and emoji get removed, and each line ends with punctuation. Inline code
+  // is read as it is, and there is no autocorrect.
   // Kind: model / oracle. Every generated token carries the words it should produce, so the oracle is just
   // "join the expected words of each line and end the line with a period", which is obviously right.
   test("R2: the voice gets every word in order, with only the listed substitutions", () => {
@@ -347,9 +348,9 @@ const block = fc.oneof(
 const markdownReply = fc.array(block, { minLength: 1, maxLength: 8 }).map((blocks) => blocks.join("\n\n"))
 
 describe("R4: no markdown symbol reaches the voice", () => {
-  // R4 (revised in P4): The text sent to the voice never contains markdown formatting symbols (heading #, list
-  // bullets, * _ ~~ emphasis, backticks, > quote markers, | table pipes, or link brackets) outside inline code.
-  // Sentence punctuation (. , ! ? : ;) is kept, so the voice pauses on it instead of saying it.
+  // R4 (revised in P4): The text sent to the voice should never have markdown symbols in it (#, list bullets, *, _,
+  // ~~, backticks, > or |) unless they're inside inline code. Normal punctuation like . , ! ? : ; stays so the voice
+  // pauses on it instead of saying it.
   // Kind: invariant. For any markdown reply, speakable() is only words, spaces and sentence punctuation.
   test("R4: speakable output is only words, spaces and sentence punctuation", () => {
     fc.assert(
