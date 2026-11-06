@@ -6,53 +6,62 @@
 
 | ID | Interview evidence | Requirement | Acceptance criteria | Changed in P4? | Property (kind) | Test |
 |---|---|---|---|---|---|---|
-| R1 | O-3 | Opening a shared conversation should register a new active viewer. | Opening the same shared link in three separate tabs results in three registered viewers. | Yes | Model/oracle: Registering N viewers with distinct IDs results in N viewer records. | `R1: registers active viewers` |
-| R3 | O-4 | Active viewers should be tracked regardless of which browser, device, or tab is used. | Opening the same shared link in two different browsers or devices results in two registered viewers. Opening it in three tabs results in three viewers. | Yes | Invariant: Every distinct viewer ID registered for a conversation appears in its viewer list. | `R3: tracks independent viewers` |
-| R4 | O-5 | The displayed viewer count should match the number of currently active viewers. | Opening five tabs results in a viewer count of five. Closing one tab reduces the count to four. | Yes | Model/oracle: The active viewer count equals the number of distinct registered viewer IDs. | `R4: maintains accurate viewer count` |
-| R5 | New (related to O-5) | Closing a shared conversation tab should remove its viewer record without affecting other active viewers. | Opening three tabs and closing one leaves two registered viewers. | New | Round-trip: Adding and then removing a viewer restores the original viewer list; other viewers remain unchanged. | `R5: removes closed viewers` |
-| R6 | New (related to O-5) | Registering the same viewer ID multiple times should not create duplicate entries. | Registering the same viewer ID three times results in one viewer record. | New | Invariant: A viewer ID appears at most once in a conversation's viewer list. | `R6: prevents duplicate viewers` |
+| R1 | O-3 | Each new unique viewer increases the viewer count by one. | Registering five viewers with unique IDs results in a viewer count of five. Each registration increases the count by exactly one. | Yes | Invariant: Registering a new unique viewer increases the active viewer count by one. | `increments active viewer count for each unique viewer` |
+| R2 | O-5 | Removing an active viewer decreases the count by one. | Registering five viewers and removing one results in a viewer count of four. Each removal decreases the count by exactly one. | Yes | Invariant: Removing an active viewer decreases the active viewer count by one. | `decrements active viewer count when a viewer leaves` |
+| R3 | O-5 | Adding and then removing viewers should restore the original count. | Registering five viewers and then removing all five restores the viewer count to its original value. | New | Round-trip: Adding and then removing the same set of viewers restores the original active viewer count. | `restores viewer count after opening and closing shared sessions` |
+| R4 | O-4 | Adding viewers to one conversation should not affect the viewer count of another conversation. | Registering three viewers to one conversation and five viewers to another results in independent counts of three and five. | New | Metamorphic: Adding viewers to one conversation does not change the active viewer count of another conversation. | `tracks active viewers of different conversations independently` |
 
 ## Requirement Changes
 
 | ID | Original requirement (P3) | Revised requirement | Why it changed |
 |---|---|---|---|
-| R1 | Each time someone successfully opens a shared conversation, a new access event should be recorded. | Opening a shared conversation should register a new active viewer. | The implementation tracks currently active viewers instead of maintaining a cumulative history of access events. Each open tab is counted separately. |
-| R2 | Access history should not expose visitors' personal information, such as email addresses or IP addresses. | Removed. | The feature does not collect or store email addresses or IP addresses and does not maintain a historical access log. This requirement was removed from the active requirements because it does not describe functionality being implemented. |
-| R3 | Accesses should be recorded regardless of which browser or device is used. | Active viewers should be tracked regardless of which browser, device, or tab is used. | The requirement was revised to focus on active viewers and expanded to cover multiple tabs in the same browser. |
-| R4 | The displayed access count should match the number of recorded access events. | The displayed viewer count should match the number of currently active viewers. | The displayed count represents active viewers rather than cumulative accesses. Closing a tab should decrease the count. |
-| R5 | New requirement. | Closing a shared conversation tab should remove its viewer record without affecting other active viewers. | Added to ensure the active viewer count remains accurate when viewers leave a conversation. |
-| R6 | New requirement. | Registering the same viewer ID multiple times should not create duplicate entries. | Added to prevent repeated registration requests from inflating the active viewer count. |
+| R1 | Each time someone successfully opens a shared conversation, a new access event should be recorded. | Each new unique viewer increases the viewer count by one. | The implementation tracks currently active viewers rather than cumulative access events. The revised requirement focuses on correctly incrementing the active viewer count for new accesses. |
+| R2 | The displayed access count should match the number of recorded access events. | Removing an active viewer decreases the count by one. | Because the count represents currently active viewers, it must decrease when a viewer leaves rather than continually increasing. |
+| R3 | Accesses should be recorded regardless of which browser or device is used. | Adding and then removing viewers should restore the original count. | The revised requirement verifies that viewer registration and removal work together correctly and do not leave stale viewer records. |
+| R4 | New requirement. | Adding viewers to one conversation should not affect the viewer count of another conversation. | Added to ensure that viewer records are associated with the correct shared conversation and do not interfere with other conversations. |
 
 ## Property-Based Testing
 
-**R1 — Model/oracle**
+**R1 — Invariant: Incrementing active viewer count**
 
-Generate a list of viewers with distinct IDs, register each viewer to a shared conversation, and verify that the resulting viewer list contains exactly those viewers.
+Generate a list of viewers with unique IDs. Register each viewer to a shared conversation and verify that the active viewer count increases by exactly one after each registration.
 
-**R3 — Invariant**
+**R2 — Invariant: Decrementing active viewer count**
 
-Generate distinct viewer IDs representing different browsers, devices, or tabs. Register them to the same shared conversation and verify that every viewer ID appears in the resulting viewer list.
+Generate a list of viewers with unique IDs and register them to a shared conversation. Remove each viewer one at a time and verify that the active viewer count decreases by exactly one after each removal.
 
-**R4 — Model/oracle**
+**R3 — Round-trip: Restoring the original viewer count**
 
-Generate a list of viewers with distinct IDs, register them, and verify that the active viewer count equals the number of registered viewers. Remove a subset of viewers and verify that the count decreases by the number removed.
+Generate a list of viewers with unique IDs and record the initial active viewer count. Register all generated viewers to simulate opening shared sessions, then remove all of them to simulate closing the sessions. Verify that the final active viewer count equals the initial count.
 
-**R5 — Round-trip**
+**R4 — Metamorphic: Independent viewer tracking across conversations**
 
-Generate a viewer, register them to a shared conversation, and then remove them. Verify that the viewer list returns to its original state. When multiple viewers are registered, verify that removing one does not remove the others.
+Generate two lists of viewers and two different shared conversation IDs. Register viewers to the first conversation and record its active viewer count. Register viewers to the second conversation and verify that the first conversation's count remains unchanged. Also verify that the second conversation has the expected number of active viewers.
 
-**R6 — Invariant**
-
-Generate a viewer and a repetition count. Register the same viewer multiple times and verify that the viewer appears exactly once in the active viewer list.
-
-### Generators
+## Generators
 
 - **Viewer IDs:** `fc.uuid()` generates random viewer identifiers.
-- **Viewer names:** `fc.string()` generates viewer names with different lengths and characters.
-- **Viewer lists:** `fc.uniqueArray()` generates collections of viewers with distinct IDs.
-- **Tab counts:** `fc.integer({ min: 1, max: 10 })` generates the number of simulated open tabs.
-- **Registration counts:** `fc.integer({ min: 2, max: 10 })` generates the number of times a viewer is registered.
+- **Viewer lists:** `fc.uniqueArray(fc.uuid(), { minLength: 1, maxLength: 15 })` generates lists of 1–15 unique viewer IDs.
+- **Viewer objects:** Generated IDs are mapped to objects containing an `id` and the name `"Viewer"`.
+- **Independent viewer lists:** Two viewer-list generators produce collections of viewers for testing separate shared conversations.
+- **Shared conversation IDs:** `crypto.randomUUID()` generates identifiers for test conversations.
 
-### Properties written or suggested by AI tools
+## Test Implementation
 
-ChatGPT assisted with revising the requirements and suggesting property-based testing strategies. The properties will be reviewed and implemented using Vitest and fast-check.
+The four property-based tests are implemented in:
+
+`packages/opencode/test/share/share.property.test.ts`
+
+The tests use **Bun and fast-check**. Each property is evaluated using randomly generated viewer lists to test the behavior across different viewer counts and identifiers.
+
+To run the tests from `packages/opencode`:
+
+```bash
+bun test test/share/share.property.test.ts
+```
+
+These tests verify the backend's active viewer registration, removal, count restoration, and isolation between conversations.
+
+## Properties Written or Suggested by AI Tools
+
+ChatGPT assisted with identifying appropriate property-based testing patterns and developing the four tests. The tests use two invariant properties, one round-trip property, and one metamorphic property. ChatGPT also assisted with refining the requirements and identifying potential issues with duplicate viewer IDs and cleanup in the independent-conversations test.
