@@ -970,7 +970,7 @@ export function Prompt(props: PromptProps) {
     const copyState = getCopyCommandState(trimmed, messageCount)
     if (store.mode !== "shell" && copyState.kind !== "none") {
       if (copyState.kind === "invalid") {
-        toast.show({ message: "Message count must be a positive integer.", variant: "error" })
+        toast.show({ message: "At least one message must be copied.", variant: "error" })
         return true
       }
 
