@@ -8,7 +8,7 @@ import { Share } from "../../../enterprise/src/core/share";
 const viewers = fc.uniqueArray(fc.uuid(), {minLength: 1, maxLength: 15,}).map((ids) => ids.map((id) => ({id, name: "Viewer",})));
 
 describe('shared conversation viewer tracking', () => {
-    // Pattern: invariant. Each new unique viewer increases the count by one.
+    // (R1) Pattern: invariant. Each new unique viewer increases the count by one.
     test("increments active viewer count for each unique viewer", async () => {
         await fc.assert(
             fc.asyncProperty(viewers, async (generatedViewers: Share.Viewer[]) => {
@@ -29,7 +29,7 @@ describe('shared conversation viewer tracking', () => {
         )
     });
 
-    // Pattern: invariant. Removing an active viewer decreases the count by one.
+    // (R2) Pattern: invariant. Removing an active viewer decreases the count by one.
     test("decrements active viewer count when a viewer leaves", async () => {
         await fc.assert(
             fc.asyncProperty(viewers, async (generatedViewers: Share.Viewer[]) => {
@@ -55,7 +55,7 @@ describe('shared conversation viewer tracking', () => {
         )
     });
 
-    // Pattern: round-trip. Adding and then removing viewers should restore the original count.
+    // (R3) Pattern: round-trip. Adding and then removing viewers should restore the original count.
     test("restores viewer count after opening and closing shared sessions", async () => {
         await fc.assert(
             fc.asyncProperty(viewers, async (generatedViewers: Share.Viewer[]) => {
@@ -86,7 +86,7 @@ describe('shared conversation viewer tracking', () => {
         )
     });
 
-    // Pattern: metamorphic. Adding viewers to one conversation should not affect another.
+    // (R4) Pattern: metamorphic. Adding viewers to one conversation should not affect another.
     test("tracks active viewers of different conversations independently", async () => {
         await fc.assert(
             fc.asyncProperty(viewers, async (generatedViewers: Share.Viewer[]) => {
