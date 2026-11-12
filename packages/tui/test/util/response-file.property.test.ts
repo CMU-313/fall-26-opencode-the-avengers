@@ -4,6 +4,9 @@ import fc from "fast-check"
 import { tmpdir } from "../fixture/fixture"
 import { writeResponseFile } from "../../src/util/response-file"
 
+// Fixed seed so a mutant is killed or survives the same way on every run (needed for Stryker).
+fc.configureGlobal({ seed: 42 })
+
 // Generator for response content. We mix plain strings with markdown-shaped
 // fragments (headings, list items, fenced code blocks, empty strings, blank
 // lines) so the properties actually exercise the structure the interviews
