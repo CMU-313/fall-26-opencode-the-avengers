@@ -8,6 +8,10 @@ import fc from "fast-check"
 import ts from "typescript"
 import { edgeChunks, speakable } from "../../src/speech"
 
+// Fixed seed so every run generates the same inputs. Mutation testing (Stryker, traceability/williey.md) needs this:
+// with a random seed a mutant can be killed in one run and survive the next.
+fc.configureGlobal({ seed: 42 })
+
 // ---------------------------------------------------------------------------------------------------------------
 // Shared generators
 // ---------------------------------------------------------------------------------------------------------------
