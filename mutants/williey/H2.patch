@@ -1,0 +1,12 @@
+diff --git a/packages/tui/src/speech.ts b/packages/tui/src/speech.ts
+--- a/packages/tui/src/speech.ts
++++ b/packages/tui/src/speech.ts
+@@ -185,7 +185,7 @@
+       .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
+       .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+       .replace(/<https?:\/\/[^>\s]+>|https?:\/\/[^\s)>\]]+/g, "link")
+-      .replace(/<\/?[a-z][^>]*>/gi, "")
++      .replace(/<\/?[a-z][^>]*>/g, "")
+       .replace(/`+([^`]+)`+/g, (_, content: string) => `\u0000${code.push(content) - 1}\u0000`)
+       .replace(/^[ \t]*(?:[-*_][ \t]*){3,}$/gm, "")
+       .replace(/^[ \t]*\|?(?:[ \t]*:?-+:?[ \t]*\|)+[ \t]*(?::?-+:?)?[ \t]*$/gm, "")
