@@ -11,11 +11,15 @@ fc.configureGlobal({ seed: 42 })
 // fragments (headings, list items, fenced code blocks, empty strings, blank
 // lines) so the properties actually exercise the structure the interviews
 // cared about: markdown must survive (C-5, S-1) and nothing extra is added
-// (C-2, O-2).
+// (C-2, O-2). fc.string() only yields printable ASCII, so Windows-style line
+// endings (\r\n) and bare \r are added explicitly: a save that rewrites line
+// endings would otherwise go unnoticed.
 const content = fc.oneof(
   fc.string(),
-  fc.constantFrom("# Heading\n", "- item\n", "```\ncode\n```\n", "", "\n\n"),
-  fc.array(fc.constantFrom("# H\n", "- a\n", "text\n", "```\nx\n```\n")).map((xs) => xs.join("")),
+  fc.constantFrom("# Heading\n", "- item\n", "```\ncode\n```\n", "", "\n\n", "line one\r\nline two\r\n", "\r\n", "\r"),
+  fc
+    .array(fc.constantFrom("# H\n", "- a\n", "text\n", "```\nx\n```\n", "\r\n", "\r", "a\r\nb"))
+    .map((xs) => xs.join("")),
 )
 
 // R2: When saving as Markdown, the saved file preserves the response content exactly, so headings, lists, and code blocks are kept.
@@ -103,9 +107,9 @@ test("R1: the overwrite prompt appears exactly when the file already exists", as
 // Kind: round-trip / metamorphic
 test("R6: timestamped save prepends a header and preserves the content", async () => {
   await fc.assert(
-    fc.asyncProperty(content, async (text) => {
+    // Timestamps are generated (not fixed) so their milliseconds vary; a header that drops precision must fail.
+    fc.asyncProperty(content, fc.date({ noInvalidDate: true }), async (text, when) => {
       await using tmp = await tmpdir()
-      const when = new Date("2026-11-05T12:00:00.000Z")
       const written = await writeResponseFile({
         directory: tmp.path,
         filename: "answer.md",
