@@ -72,6 +72,53 @@ Final hand-written result: 5 of 5 killed. Final Stryker score: 10 of 10 (100%).
 
 None. No Stryker mutant survived, and every hand-written mutant changes observable output (the saved bytes, the prompt count, or the header text), so none is equivalent.
 
+## Agent failure case
+
+**Property:** `packages/tui/test/util/response-file.opencode-r2.property.test.ts`, written by opencode (model: Gemini 3.5 Flash Lite) for R2. It is committed unchanged as evidence. Share link: not available (the `/share` command is not offered in my opencode build, so the transcript is quoted below and an exported excerpt is in `mutants/pboonsit/transcript/opencode-r2-session.md`).
+
+**Transcript excerpt.** Prompt I gave opencode, in a new session:
+
+```
+Write a fast-check property test for this requirement of writeResponseFile
+in packages/tui/src/util/response-file.ts:
+
+"When saving as Markdown, the saved file preserves the response content
+exactly, so headings, lists, and code blocks are kept."
+
+Do not read anything in the traceability/ or mutants/ folders.
+Put it in packages/tui/test/util/response-file.opencode-r2.property.test.ts.
+```
+
+opencode read `response-file.ts`, `package.json`, the existing `response-file.property.test.ts` and `response-file.test.ts`, wrote the file, ran it (1 pass, 0 fail), and replied: "The fast-check property test for R2 has been successfully created at packages/tui/test/util/response-file.opencode-r2.property.test.ts and passes all runs." Its generator:
+
+```ts
+const markdownContent = fc.oneof(
+  fc.string(),
+  fc.array(
+    fc.oneof(
+      fc.string().map((s) => `# ${s}\n`),
+      fc.string().map((s) => `- ${s}\n`),
+      fc.string().map((s) => `\`\`\`\n${s}\n\`\`\`\n`),
+      fc.string().map((s) => `${s}\n`)
+    )
+  ).map((parts) => parts.join(""))
+)
+```
+
+**Mutant it let survive:** H4 (`\r\n` in the content is rewritten to `\n` before writing). Run against only opencode's file with seed 42: 1 pass, 0 fail, so H4 survives. The same file does kill H3 (counterexample `" "`).
+
+**Why the property was too weak.** The assertion is fine (`saved === text`). The generator is the problem: `fc.string()` only produces printable ASCII, and every other piece is a heading, list item or code fence built from `fc.string()` plus `\n`. It never produces `\r`, so the bug (a save that rewrites Windows line endings) can never show up. The property reads as thorough because it covers headings, lists and code blocks, but those are the cases the requirement names, not the ones that break.
+
+**Strengthened version:** `packages/tui/test/util/response-file.opencode-r2-strengthened.property.test.ts`. Same assertion; one added source in the generator, `fc.string({ unit: fc.constantFrom("a", " ", "#", "-", "`", "\n", "\r") })`, so line endings are common.
+
+**Evidence it kills the mutant.** On the real code: 1 pass, 0 fail. With H4 applied: fails with a counterexample containing `\r`. With H3 applied: fails with counterexample `"a"`.
+
+**Context and caveats.**
+- This was the third attempt. My first two (R6, then R3) were written in a repo where my own strengthened property tests were already present, and opencode copied that generator, so they were not independent. Their results: against the R6 file H1 and H2 survived, and against the R3 file H3-H5 survived, but only because those mutants are outside what each requirement covers. I did not count them.
+- For this attempt I moved the other opencode test files out of the folder and temporarily restored the original (pre-strengthening) property test so no strengthened generator was nearby. opencode still read that original file, which has the same `fc.string()`-based weakness, and wrote its own generator.
+- The prompt told opencode not to read `traceability/` or `mutants/`; the transcript shows it did not.
+- After writing the file, opencode ran `git diff` and `git restore` on my temporarily edited `response-file.property.test.ts` without being asked. That only undid my own temporary change, but it is an example of the agent touching a file outside the task.
+
 ## Notes
 
 - R6 holds for `writeResponseFile`, but the `/save` caller in `routes/session/index.tsx` does not pass `timestamp` yet, so users cannot get a timestamped file from the UI. Passing it unconditionally would put a header into every save, which contradicts R5 and the existing save tests, so it needs an opt-in choice in the save dialog. That is left as follow-up work.
