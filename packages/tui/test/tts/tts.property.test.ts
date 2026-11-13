@@ -34,6 +34,36 @@ const url = fc
   )
   .map(([scheme, host, path, rest]) => `${scheme}://${host}${path.map((part) => `/${part}`).join("")}${rest}`)
 
+// Fenced code blocks, the ways an assistant writes them: ``` or ~~~, indented up to 3 spaces (inside a list), with
+// spaces after the closing fence. Body lines never close the block, but some look like they might: a line that ends
+// with the fence marker ("see ```") or starts with it and goes on ("``` again"). Only a line that is just the marker
+// closes a block.
+const fenceOpen = fc.record({
+  indent: fc.constantFrom("", "", " ", "  ", "   "),
+  marker: fc.constantFrom("```", "~~~"),
+  lang: fc.constantFrom("", "ts", "bash", "md"),
+})
+const fenceBody = (marker: string) =>
+  fc.array(
+    fc.oneof(
+      { weight: 4, arbitrary: fc.stringMatching(/^[ -_a-}]{0,30}$/) },
+      { weight: 1, arbitrary: proseWord.map((text) => `${text} ${marker}`) },
+      { weight: 1, arbitrary: proseWord.map((text) => `${marker} ${text}`) },
+    ),
+    { maxLength: 4 },
+  )
+const fence = fenceOpen.chain((open) =>
+  fc
+    .tuple(fenceBody(open.marker), fc.constantFrom("", "", " ", "  ", "\t"))
+    .map(([body, trailing]) =>
+      [open.indent + open.marker + open.lang, ...body, open.indent + open.marker + trailing].join("\n"),
+    ),
+)
+// A block that is still streaming: the opening fence, maybe some code, and no closing fence yet.
+const openFence = fenceOpen.chain((open) =>
+  fenceBody(open.marker).map((body) => [open.indent + open.marker + open.lang, ...body].join("\n")),
+)
+
 // ---------------------------------------------------------------------------------------------------------------
 // R1
 // ---------------------------------------------------------------------------------------------------------------
@@ -89,6 +119,27 @@ const replyText = fc
   )
   .map((parts) => parts.join(" "))
 
+// Sentences the test knows the ends of without copying the splitter's regex: every sentence ends in . ! or ?, and no
+// token inside one does. Tokens with a dot in front or in the middle stay in (".env", "Node.js", "3.14"), since those
+// dots are not sentence ends.
+const wholeSentences = fc.array(
+  fc
+    .tuple(
+      fc.array(
+        fc.oneof(
+          { weight: 6, arbitrary: proseWord },
+          { weight: 1, arbitrary: fc.stringMatching(/^[a-z&<>"']{1,6}$/) },
+          { weight: 1, arbitrary: fc.constantFrom("café", "naïve", "你好", "日本語", "Ünïcödé") },
+          { weight: 1, arbitrary: fc.constantFrom(".env", "3.14", "Node.js", "v1.2.3", ".gitignore") },
+        ),
+        { minLength: 1, maxLength: 12 },
+      ),
+      fc.constantFrom(".", "!", "?", "...", "?!"),
+    )
+    .map(([words, end]) => words.join(" ") + end),
+  { minLength: 1, maxLength: 12 },
+)
+
 describe("R1: the whole reply is sent, in order, in requests the speech service accepts", () => {
   // R1 (revised in P4): Read-aloud should read the whole reply in order. The text is split into requests that are each
   // 4,096 bytes or less, and joining them back together should give the same text, so no words get skipped, repeated,
@@ -114,15 +165,55 @@ describe("R1: the whole reply is sent, in order, in requests the speech service 
       { numRuns: 100 },
     )
   })
+
+  // Added in P5. The round trip above also passes when every sentence (or every word) is sent as its own request, or
+  // when a request ends in the middle of a sentence. The P4 note for R1 says a sentence stays together when it fits,
+  // and each request is a new connection to the speech service, so requests should be full.
+  // Kind: invariant. The request limit moves with the generated text (exactly the longest sentence, exactly a run of
+  // sentences, or a few bytes more), so sentences land exactly on the limit instead of only near 4,096.
+  test("R1: requests are whole sentences, packed as full as the limit allows", () => {
+    fc.assert(
+      fc.property(
+        wholeSentences,
+        fc.nat(),
+        fc.nat(),
+        fc.constantFrom(0, 0, 0, 1, 3, 17),
+        (list, from, count, extra) => {
+          const text = list.join(" ")
+          const start = from % list.length
+          const run = list.slice(start, start + 1 + (count % (list.length - start)))
+          const limit = Math.max(...list.map(requestBytes), requestBytes(run.join(" "))) + extra
+          const requests = edgeChunks(text, limit)
+          for (const request of requests) expect(requestBytes(request)).toBeLessThanOrEqual(limit)
+          expect(requests.join(" ")).toBe(text)
+          // Every request ends where a generated sentence ends.
+          const ends = new Set(list.map((_, index) => list.slice(0, index + 1).join(" ").length))
+          requests.reduce((at, request) => {
+            expect(ends.has(at + request.length)).toBe(true)
+            return at + request.length + 1
+          }, 0)
+          // Two neighbours never fit in one request.
+          requests.slice(1).forEach((request, index) => {
+            expect(requestBytes(`${requests[index]} ${request}`)).toBeGreaterThan(limit)
+          })
+        },
+      ),
+      { numRuns: 300 },
+    )
+  })
 })
 
 // ---------------------------------------------------------------------------------------------------------------
 // R2
 // ---------------------------------------------------------------------------------------------------------------
 
-// Each generated token is a piece of markdown together with what the voice should get for it.
-type Token = { markdown: string; spoken: string }
-const word: fc.Arbitrary<Token> = proseWord.map((text) => ({ markdown: text, spoken: text }))
+// Each generated token is a piece of markdown together with what the voice should get for it ("" when the voice
+// should get nothing). lineStart is what to write instead when the token opens a line.
+type Token = { markdown: string; spoken: string; lineStart?: string }
+// "C#" and "F#" are words, not headings: a # in the middle of a line is not a heading marker.
+const word: fc.Arbitrary<Token> = fc
+  .oneof({ weight: 12, arbitrary: proseWord }, { weight: 1, arbitrary: fc.constantFrom("C#", "F#") })
+  .map((text) => ({ markdown: text, spoken: text }))
 const link: fc.Arbitrary<Token> = fc
   .tuple(label, url)
   .map(([text, href]) => ({ markdown: `[${text}](${href})`, spoken: text }))
@@ -131,15 +222,34 @@ const image: fc.Arbitrary<Token> = fc
   .map(([text, href]) => ({ markdown: `![${text}](${href})`, spoken: text }))
 const bareUrl: fc.Arbitrary<Token> = url.map((href) => ({ markdown: href, spoken: "link" }))
 const autolink: fc.Arbitrary<Token> = url.map((href) => ({ markdown: `<${href}>`, spoken: "link" }))
-// Inline code the way a coding assistant writes it. Underscores and asterisks are normal inside code (Python's
-// __init__ and **kwargs, snake_case, C's *ptr), which is exactly where a markdown cleaner can mistake them for bold or
-// italics.
+// Inline code the way a coding assistant writes it. Underscores, asterisks and pipes are normal inside code
+// (Python's __init__ and **kwargs, snake_case, C's *ptr, a || b), which is exactly where a markdown cleaner can
+// mistake them for bold, italics or a table.
 const identifier = fc.oneof(
   fc.constantFrom("__init__", "__name__", "__dirname", "*args", "**kwargs", "_private", "snake_case", "MAX_RETRIES"),
-  fc.constantFrom("--force", "a.b()", "x*y", "*ptr", "use_state"),
+  fc.constantFrom("--force", "a.b()", "x*y", "*ptr", "use_state", "a || b", "x | y"),
   fc.stringMatching(/^[a-z_][a-z0-9_]{0,10}$/),
 )
-const inlineCode: fc.Arbitrary<Token> = identifier.map((code) => ({ markdown: `\`${code}\``, spoken: code }))
+// Code spans can use one, two or three backticks. Three backticks only open a code block at the start of a line, so
+// a span that opens a line is written with one.
+const inlineCode: fc.Arbitrary<Token> = fc.tuple(identifier, fc.constantFrom(1, 1, 2, 3)).map(([code, ticks]) => ({
+  markdown: "`".repeat(ticks) + code + "`".repeat(ticks),
+  spoken: code,
+  lineStart: `\`${code}\``,
+}))
+// HTML tags are dropped and the text between them is kept.
+const html: fc.Arbitrary<Token> = fc.oneof(
+  proseWord.map((text) => ({ markdown: `<b>${text}</b>`, spoken: text })),
+  proseWord.map((text) => ({ markdown: `<span class="note">${text}</span>`, spoken: text })),
+  proseWord.map((text) => ({ markdown: `${text}<br>`, spoken: text })),
+  fc
+    .constantFrom("<br>", "<hr/>", "<BR>", "</details>", "<details open>")
+    .map((tag) => ({ markdown: tag, spoken: "" })),
+)
+// Emoji are dropped, with or without the variation selector that follows some of them (the second row).
+const emoji: fc.Arbitrary<Token> = fc
+  .constantFrom("🎉", "✅", "🚀", "👍", "❤️", "⚠️", "✔️")
+  .map((symbol) => ({ markdown: symbol, spoken: "" }))
 const token = fc.oneof(
   { weight: 6, arbitrary: word },
   { weight: 1, arbitrary: link },
@@ -147,10 +257,28 @@ const token = fc.oneof(
   { weight: 1, arbitrary: bareUrl },
   { weight: 1, arbitrary: autolink },
   { weight: 2, arbitrary: inlineCode },
+  { weight: 1, arbitrary: html },
+  { weight: 1, arbitrary: emoji },
 )
-// 1–4 lines of 1–10 tokens: prose words mixed with the substitutions that change words (links, images, bare URLs,
-// <autolinks>) and inline code, which must not change. Code blocks, emoji and markup symbols are covered by R4.
-const replyLines = fc.array(fc.array(token, { minLength: 1, maxLength: 10 }), { minLength: 1, maxLength: 4 })
+// 1–5 lines. Most are 1–10 tokens: prose words mixed with the substitutions that change words (links, images, bare
+// URLs, <autolinks>), what gets dropped (HTML tags, emoji) and inline code, which must not change. Some are a whole
+// code block, which is read as "Code block omitted". Markup symbols are covered by R4.
+const replyLines = fc.array(
+  fc.oneof(
+    {
+      weight: 6,
+      arbitrary: fc.array(token, { minLength: 1, maxLength: 10 }).map((line) => ({
+        markdown: line.map((piece, index) => (index ? piece.markdown : (piece.lineStart ?? piece.markdown))).join(" "),
+        spoken: line
+          .map((piece) => piece.spoken)
+          .filter(Boolean)
+          .join(" "),
+      })),
+    },
+    { weight: 1, arbitrary: fence.map((markdown) => ({ markdown, spoken: "Code block omitted" })) },
+  ),
+  { minLength: 1, maxLength: 5 },
+)
 
 describe("R2: every word is read, with only the listed substitutions", () => {
   // R2 (revised in P4): The text sent to the voice should keep every word of the reply in the same order. The only
@@ -158,13 +286,16 @@ describe("R2: every word is read, with only the listed substitutions", () => {
   // "Code block omitted.", markdown, HTML tags and emoji get removed, and each line ends with punctuation. Inline code
   // is read as it is, and there is no autocorrect.
   // Kind: model / oracle. Every generated token carries the words it should produce, so the oracle is just
-  // "join the expected words of each line and end the line with a period", which is obviously right.
+  // "join the expected words of each line and end the line with a period", which is obviously right. A line with
+  // nothing to say (only emoji or tags) is not read at all.
   test("R2: the voice gets every word in order, with only the listed substitutions", () => {
     fc.assert(
       fc.property(replyLines, (lines) => {
-        const markdown = lines.map((line) => line.map((piece) => piece.markdown).join(" ")).join("\n")
-        const expected = lines.map((line) => `${line.map((piece) => piece.spoken).join(" ")}.`).join(" ")
-        expect(speakable(markdown)).toBe(expected)
+        const expected = lines
+          .filter((line) => line.spoken)
+          .map((line) => `${line.spoken}.`)
+          .join(" ")
+        expect(speakable(lines.map((line) => line.markdown).join("\n"))).toBe(expected)
       }),
       { numRuns: 300 },
     )
@@ -178,6 +309,9 @@ describe("R2: every word is read, with only the listed substitutions", () => {
 // A reply is generated once, with a formatting choice attached to every word, gap and line break, so the same reply
 // can be printed plain and formatted. Formatting covers what R3 lists: bold and italics (both markers, nested one level
 // as assistants do), 2–3 spaces or tabs between words, trailing spaces, and 1–3 extra blank lines between lines.
+// Added in P5: a stray control character between two words (a NUL, a bell, the ESC of a pasted terminal colour code)
+// counts as extra space too. R3 doesn't name control characters; the speech service rejects them, so the code turns
+// each one into a space.
 const wrappers: ((text: string) => string)[] = [
   (text) => `**${text}**`,
   (text) => `__${text}__`,
@@ -191,7 +325,7 @@ const wrappers: ((text: string) => string)[] = [
 const styledWord = fc.record({
   text: proseWord,
   wrap: fc.option(fc.integer({ min: 0, max: wrappers.length - 1 }), { nil: undefined }),
-  gap: fc.constantFrom(" ", " ", "  ", "   ", "\t", " \t "),
+  gap: fc.constantFrom(" ", " ", "  ", "   ", "\t", " \t ", "\u0000", "\u0007", "\u001b"),
 })
 const styledLine = fc.record({
   words: fc.array(styledWord, { minLength: 1, maxLength: 8 }),
@@ -239,22 +373,40 @@ describe("R3: formatting never changes what is spoken", () => {
 // ---------------------------------------------------------------------------------------------------------------
 
 // Whole replies built from the markdown an assistant emits. Words are letters and digits only, so any other symbol in
-// speakable() output (besides sentence punctuation) can only have come from markup the cleaner missed.
-const punctuatedWord = fc
+// speakable() output (besides sentence punctuation) can only have come from markup the cleaner missed. Every piece
+// also carries the words it should leave behind (added in P5), so the property can tell "the symbols are gone" from
+// "the text is gone".
+type Piece = { markdown: string; words: string[] }
+const joined = (pieces: Piece[], separator = " "): Piece => ({
+  markdown: pieces.map((piece) => piece.markdown).join(separator),
+  words: pieces.flatMap((piece) => piece.words),
+})
+const punctuatedWord: fc.Arbitrary<Piece> = fc
   .tuple(proseWord, fc.constantFrom("", "", "", ".", ",", "!", "?", ":", ";"))
-  .map(([w, p]) => w + p)
-const wrap = (marker: string, text: string) => `${marker}${text}${marker}`
+  .map(([w, p]) => ({ markdown: w + p, words: [w] }))
+const wrap = (marker: string, inner: Piece): Piece => ({
+  markdown: `${marker}${inner.markdown}${marker}`,
+  words: inner.words,
+})
 // Things emphasis can wrap. Bare URLs are left out of emphasis on purpose: whether "*https://x.y*" ends in "*" is
 // ambiguous markdown, and assistants put URLs in links instead.
-const leaf = fc.oneof(
+const leaf: fc.Arbitrary<Piece> = fc.oneof(
   { weight: 5, arbitrary: punctuatedWord },
-  { weight: 1, arbitrary: proseWord.map((w) => `\`${w}\``) },
-  { weight: 1, arbitrary: fc.tuple(label, url).map(([text, href]) => `[${text}](${href})`) },
-  { weight: 1, arbitrary: fc.tuple(label, url).map(([text, href]) => `![${text}](${href})`) },
-  { weight: 1, arbitrary: url.map((href) => `<${href}>`) },
+  { weight: 1, arbitrary: proseWord.map((w) => ({ markdown: `\`${w}\``, words: [w] })) },
+  {
+    weight: 1,
+    arbitrary: fc.tuple(label, url).map(([text, href]) => ({ markdown: `[${text}](${href})`, words: text.split(" ") })),
+  },
+  {
+    weight: 1,
+    arbitrary: fc
+      .tuple(label, url)
+      .map(([text, href]) => ({ markdown: `![${text}](${href})`, words: text.split(" ") })),
+  },
+  { weight: 1, arbitrary: url.map((href) => ({ markdown: `<${href}>`, words: ["link"] })) },
 )
-const run = <T extends string>(arbitrary: fc.Arbitrary<T>, max: number) =>
-  fc.array(arbitrary, { minLength: 1, maxLength: max }).map((items) => items.join(" "))
+const run = (arbitrary: fc.Arbitrary<Piece>, max: number) =>
+  fc.array(arbitrary, { minLength: 1, maxLength: max }).map((items) => joined(items))
 const strong = fc.constantFrom("**", "__", "~~")
 const soft = fc.constantFrom("*", "_")
 // Emphasis nests one level with a different marker inside, e.g. **a *b* c**, _a **b** c_, ~~a **b** c~~.
@@ -299,67 +451,137 @@ const emphasis = fc.oneof(
     .map(([m, text]) => wrap(m, text)),
 )
 const inline = run(
-  fc.oneof({ weight: 4, arbitrary: leaf }, { weight: 1, arbitrary: url }, { weight: 2, arbitrary: emphasis }),
+  fc.oneof(
+    { weight: 4, arbitrary: leaf },
+    { weight: 1, arbitrary: url.map((href) => ({ markdown: href, words: ["link"] })) },
+    { weight: 2, arbitrary: emphasis },
+  ),
   8,
 )
-const tableCell = run(fc.oneof({ weight: 3, arbitrary: punctuatedWord }, { weight: 1, arbitrary: emphasis }), 3)
+// A table cell is a few words, or a lone "-" for an empty value. That dash is not markup, so it is read with the
+// row and counts as one of the reply's words. A row of nothing but dashes would be a delimiter row, so every row
+// keeps at least one cell with words.
+const tableCell = fc.oneof(
+  {
+    weight: 6,
+    arbitrary: run(fc.oneof({ weight: 3, arbitrary: punctuatedWord }, { weight: 1, arbitrary: emphasis }), 3),
+  },
+  { weight: 1, arbitrary: fc.constant<Piece>({ markdown: "-", words: ["-"] }) },
+)
+const tableRow = (columns: number) =>
+  fc
+    .array(tableCell, { minLength: columns, maxLength: columns })
+    .filter((cells) => cells.some((cell) => cell.markdown !== "-"))
 
-const heading = fc.tuple(fc.integer({ min: 1, max: 6 }), inline).map(([level, text]) => `${"#".repeat(level)} ${text}`)
+// Added in P5: markers are written the loose ways markdown allows, not only the tidy way. Blocks can be indented up
+// to 3 spaces, and a marker can be followed by more than one space.
+const indent = fc.constantFrom("", "", " ", "  ", "   ")
+const gap = fc.constantFrom(" ", " ", "  ", "   ")
+const prefixed = (prefix: string, text: Piece): Piece => ({ markdown: prefix + text.markdown, words: text.words })
+// A paragraph that opens with "42. " is a numbered list item, so plain paragraphs never start that way. Headings and
+// list items can: "## 2. Setup" must keep its number.
+const paragraph = inline.filter((text) => !/^\d+[.)] /.test(text.markdown))
+const heading = fc
+  .tuple(indent, fc.integer({ min: 1, max: 6 }), gap, inline)
+  .map(([lead, level, space, text]) => prefixed(lead + "#".repeat(level) + space, text))
 const bullet = fc
   .tuple(
     fc.constantFrom("", "  ", "    "),
     fc.constantFrom("-", "*", "+"),
-    fc.constantFrom("", "", "[ ] ", "[x] ", "[X] "),
+    gap,
+    fc.constantFrom("", "", "[ ] ", "[x] ", "[X] ", "[x]  "),
     inline,
   )
-  .map(([indent, marker, box, text]) => `${indent}${marker} ${box}${text}`)
+  .map(([lead, marker, space, box, text]) => prefixed(lead + marker + space + box, text))
 const numbered = fc
-  .tuple(fc.constantFrom("", "   "), fc.integer({ min: 1, max: 99 }), fc.constantFrom(".", ")"), inline)
-  .map(([indent, n, dot, text]) => `${indent}${n}${dot} ${text}`)
-const list = fc.array(fc.oneof(bullet, numbered), { minLength: 1, maxLength: 4 }).map((items) => items.join("\n"))
-const rule = fc.constantFrom("---", "***", "___", "- - -", "* * *")
-// Code blocks are full of markdown symbols; all of it must disappear. (Body lines have no ` or ~, so they can't
-// accidentally close the fence.)
-const fence = fc
-  .tuple(
-    fc.constantFrom("```", "~~~"),
-    fc.constantFrom("", "ts", "bash", "md"),
-    fc.array(fc.stringMatching(/^[ -_a-}]{0,30}$/), { maxLength: 4 }),
-  )
-  .map(([marker, lang, body]) => [marker + lang, ...body, marker].join("\n"))
+  .tuple(fc.constantFrom("", "   "), fc.integer({ min: 1, max: 99 }), fc.constantFrom(".", ")"), gap, inline)
+  .map(([lead, n, dot, space, text]) => prefixed(`${lead}${n}${dot}${space}`, text))
+const list = fc.array(fc.oneof(bullet, numbered), { minLength: 1, maxLength: 4 }).map((items) => joined(items, "\n"))
+const rule: fc.Arbitrary<Piece> = fc
+  .constantFrom("---", "***", "___", "- - -", "* * *")
+  .map((markdown) => ({ markdown, words: [] }))
+// Code blocks are full of markdown symbols; all of it must disappear and only the announcement is read.
+const omitted = ["Code", "block", "omitted"]
+const codeBlock: fc.Arbitrary<Piece> = fence.map((markdown) => ({ markdown, words: omitted }))
+// Tables, with the delimiter row written the ways GFM allows: with or without the outer pipes, with 0–2 spaces around
+// the dashes, with a single dash, with trailing spaces. Rows may leave off the closing pipe.
 const table = fc
   .integer({ min: 1, max: 4 })
   .chain((columns) =>
-    fc.tuple(
-      fc.array(tableCell, { minLength: columns, maxLength: columns }),
-      fc.array(fc.constantFrom("---", ":---", "---:", ":---:"), { minLength: columns, maxLength: columns }),
-      fc.array(fc.array(tableCell, { minLength: columns, maxLength: columns }), { minLength: 1, maxLength: 3 }),
-    ),
+    fc.record({
+      lead: indent,
+      head: tableRow(columns),
+      align: fc.array(fc.constantFrom("---", ":---", "---:", ":---:", "-"), { minLength: columns, maxLength: columns }),
+      pad: fc.constantFrom(" ", " ", "", "  "),
+      open: fc.constantFrom(true, true, false),
+      close: fc.constantFrom(true, true, false),
+      trailing: fc.constantFrom("", "", " ", "\t"),
+      rows: fc.array(tableRow(columns), { minLength: 1, maxLength: 3 }),
+      rowClose: fc.constantFrom(true, true, false),
+    }),
   )
-  .map(([head, align, rows]) => [head, align, ...rows].map((cells) => `| ${cells.join(" | ")} |`).join("\n"))
-const baseBlock = fc.oneof({ weight: 3, arbitrary: inline }, heading, list, rule, fence, table)
-// Blockquotes can hold any block, including another blockquote.
-const quote = (block: string) =>
-  block
+  .map((t): Piece => {
+    const row = (cells: Piece[]) =>
+      `${t.lead}| ${cells.map((cell) => cell.markdown).join(" | ")}${t.rowClose ? " |" : ""}`
+    // A one-column delimiter row always gets its closing pipe: without any pipe it is a horizontal rule, and
+    // speakable() does not recognise "| ---" (see "Stryker comparison" in traceability/williey.md).
+    const delimiter =
+      t.lead +
+      (t.open ? "|" : "") +
+      t.align.map((dashes) => t.pad + dashes + t.pad).join("|") +
+      (t.close || t.align.length === 1 ? "|" : "") +
+      t.trailing
+    return {
+      markdown: [row(t.head), delimiter, ...t.rows.map(row)].join("\n"),
+      words: [t.head, ...t.rows].flat().flatMap((cell) => cell.words),
+    }
+  })
+const baseBlock = fc.oneof({ weight: 3, arbitrary: paragraph }, heading, list, rule, codeBlock, table)
+// Blockquotes can hold any block, including another blockquote. The marker is written "> " or just ">".
+const quote = (block: Piece, marker: string): Piece => ({
+  markdown: block.markdown
     .split("\n")
-    .map((line) => `> ${line}`)
-    .join("\n")
+    .map((line) => marker + line)
+    .join("\n"),
+  words: block.words,
+})
+const quoteMarker = fc.constantFrom("> ", "> ", ">")
 const block = fc.oneof(
   { weight: 6, arbitrary: baseBlock },
-  { weight: 2, arbitrary: baseBlock.map(quote) },
-  { weight: 1, arbitrary: baseBlock.map((b) => quote(quote(b))) },
+  { weight: 2, arbitrary: fc.tuple(baseBlock, quoteMarker).map(([b, marker]) => quote(b, marker)) },
+  {
+    weight: 1,
+    arbitrary: fc.tuple(baseBlock, quoteMarker, quoteMarker).map(([b, inner, outer]) => quote(quote(b, inner), outer)),
+  },
 )
-const markdownReply = fc.array(block, { minLength: 1, maxLength: 8 }).map((blocks) => blocks.join("\n\n"))
+// 1–8 blocks. Sometimes the reply is still streaming and ends inside a code block.
+const markdownReply = fc
+  .tuple(
+    fc.array(block, { minLength: 1, maxLength: 8 }),
+    fc.option(
+      openFence.map((markdown) => ({ markdown, words: omitted })),
+      { nil: undefined, freq: 6 },
+    ),
+  )
+  .map(([blocks, streaming]) => joined(streaming ? [...blocks, streaming] : blocks, "\n\n"))
 
 describe("R4: no markdown symbol reaches the voice", () => {
   // R4 (revised in P4): The text sent to the voice should never have markdown symbols in it (#, list bullets, *, _,
   // ~~, backticks, > or |) unless they're inside inline code. Normal punctuation like . , ! ? : ; stays so the voice
   // pauses on it instead of saying it.
   // Kind: invariant. For any markdown reply, speakable() is only words, spaces and sentence punctuation.
+  // Strengthened in P5 (see "Agent failure case" in traceability/williey.md): the character check alone also passed
+  // when the cleaner deleted text or put other words in its place, because "" and "Stryker was here!" are made of
+  // allowed characters too. The words now have to be exactly the reply's words, in order, and punctuation has to sit
+  // on a word. The only "-" allowed is a table cell that is just a dash.
   test("R4: speakable output is only words, spaces and sentence punctuation", () => {
     fc.assert(
-      fc.property(markdownReply, (markdown) => {
-        expect(speakable(markdown)).toMatch(/^[A-Za-z0-9 .,!?:;]*$/)
+      fc.property(markdownReply, (reply) => {
+        const spoken = speakable(reply.markdown)
+        expect(spoken).toMatch(/^[A-Za-z0-9 .,!?:;-]*$/)
+        // A "-" counts as a word, so a leaked bullet or table rule shows up as an extra one.
+        expect<string[]>(spoken.match(/[A-Za-z0-9]+|-/g) ?? []).toEqual(reply.words)
+        expect(spoken).not.toMatch(/^[ .,!?:;]| [.,!?:;]|  | $/)
       }),
       { numRuns: 300 },
     )

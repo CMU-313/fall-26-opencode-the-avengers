@@ -1,12 +1,12 @@
 diff --git a/packages/tui/src/speech.ts b/packages/tui/src/speech.ts
 --- a/packages/tui/src/speech.ts
 +++ b/packages/tui/src/speech.ts
-@@ -141,7 +141,7 @@
- 
+@@ -142,7 +142,7 @@
  /** Splits text into requests at sentence boundaries, keeping each request's escaped text under the byte limit. */
  export function edgeChunks(text: string, limit = EDGE_CHUNK_BYTES) {
--  const size = (value: string) => Buffer.byteLength(escapeXml(value))
-+  const size = (value: string) => Buffer.byteLength(escapeXml(value), "ascii")
+   // Requests are trimmed before they are sent, so the whitespace after a sentence doesn't count toward the limit.
+-  const size = (value: string) => Buffer.byteLength(escapeXml(value.trimEnd()))
++  const size = (value: string) => Buffer.byteLength(escapeXml(value.trimEnd()), "ascii")
    // A sentence ends at . ! or ? followed by whitespace or the end of the text, so every character lands in a sentence
    // and words like ".env", "Node.js" and "3.14" are never cut in two.
    return (text.match(/\S[\s\S]*?(?:[.!?](?=\s|$)|$)\s*/g) ?? [])

@@ -2,7 +2,7 @@
   "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
   "testRunner": "command",
   "commandRunner": { "command": "bun test test/tts/tts.property.test.ts" },
-  "mutate": ["src/speech.ts:143-218"],
+  "mutate": ["src/speech.ts:143-220"],
   "coverageAnalysis": "off",
   "reporters": ["html", "clear-text", "progress"]
 }

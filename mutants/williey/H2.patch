@@ -1,7 +1,7 @@
 diff --git a/packages/tui/src/speech.ts b/packages/tui/src/speech.ts
 --- a/packages/tui/src/speech.ts
 +++ b/packages/tui/src/speech.ts
-@@ -185,7 +185,7 @@
+@@ -186,7 +186,7 @@
        .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
        .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
        .replace(/<https?:\/\/[^>\s]+>|https?:\/\/[^\s)>\]]+/g, "link")

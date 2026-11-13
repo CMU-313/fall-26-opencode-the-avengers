@@ -141,7 +141,8 @@ function edgeSsml(text: string) {
 
 /** Splits text into requests at sentence boundaries, keeping each request's escaped text under the byte limit. */
 export function edgeChunks(text: string, limit = EDGE_CHUNK_BYTES) {
-  const size = (value: string) => Buffer.byteLength(escapeXml(value))
+  // Requests are trimmed before they are sent, so the whitespace after a sentence doesn't count toward the limit.
+  const size = (value: string) => Buffer.byteLength(escapeXml(value.trimEnd()))
   // A sentence ends at . ! or ? followed by whitespace or the end of the text, so every character lands in a sentence
   // and words like ".env", "Node.js" and "3.14" are never cut in two.
   return (text.match(/\S[\s\S]*?(?:[.!?](?=\s|$)|$)\s*/g) ?? [])
@@ -189,9 +190,10 @@ export function speakable(markdown: string) {
       .replace(/`+([^`]+)`+/g, (_, content: string) => `\u0000${code.push(content) - 1}\u0000`)
       .replace(/^[ \t]*(?:[-*_][ \t]*){3,}$/gm, "")
       .replace(/^[ \t]*\|?(?:[ \t]*:?-+:?[ \t]*\|)+[ \t]*(?::?-+:?)?[ \t]*$/gm, "")
-      .replace(/^[ \t]*#{1,6}[ \t]+/gm, "")
       // A list marker needs text after it; otherwise "42." followed by stray spaces would be dropped as an empty item.
+      // List markers go before heading markers, so the number in "## 2. Setup" isn't taken for a list marker.
       .replace(/^[ \t]*(?:[-*+]|\d+[.)])[ \t]+(?:\[[ xX]\][ \t]+)?(?=\S)/gm, "")
+      .replace(/^[ \t]*#{1,6}[ \t]+/gm, "")
       .replace(/(\*\*|__|~~)(.+?)\1/g, unwrapStrong)
       .replace(/(^|[^\w*])[*_]([^*_\s](?:[^*_\n]*[^*_\s])?)[*_](?![\w*])/g, "$1$2")
       // oxlint-disable-next-line no-control-regex -- matches only the placeholders above; the text has no other NULs
