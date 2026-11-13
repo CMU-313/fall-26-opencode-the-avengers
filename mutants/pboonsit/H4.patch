@@ -1,0 +1,18 @@
+diff --git a/packages/tui/src/util/response-file.ts b/packages/tui/src/util/response-file.ts
+index dfe4c7b..9a108d5 100644
+--- a/packages/tui/src/util/response-file.ts
++++ b/packages/tui/src/util/response-file.ts
+@@ -12,10 +12,11 @@ export async function writeResponseFile(input: {
+ }) {
+   const filepath = path.resolve(input.directory, input.filename)
+   if ((await Bun.file(filepath).exists()) && !(await input.confirmOverwrite())) return false
++  const content = input.content.replace(/\r\n/g, "\n")
+   const body =
+     input.timestamp === undefined
+-      ? input.content
+-      : `<!-- Saved ${input.timestamp.toISOString()} -->\n\n${input.content}`
++      ? content
++      : `<!-- Saved ${input.timestamp.toISOString()} -->\n\n${content}`
+   await Bun.write(filepath, body)
+   return true
+ }

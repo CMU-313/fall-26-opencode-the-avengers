@@ -1,0 +1,13 @@
+diff --git a/packages/tui/src/util/response-file.ts b/packages/tui/src/util/response-file.ts
+index dfe4c7b..a139aa5 100644
+--- a/packages/tui/src/util/response-file.ts
++++ b/packages/tui/src/util/response-file.ts
+@@ -15,7 +15,7 @@ export async function writeResponseFile(input: {
+   const body =
+     input.timestamp === undefined
+       ? input.content
+-      : `<!-- Saved ${input.timestamp.toISOString()} -->\n\n${input.content}`
++      : `<!-- Saved ${new Date(Math.floor(input.timestamp.getTime() / 1000) * 1000).toISOString()} -->\n\n${input.content}`
+   await Bun.write(filepath, body)
+   return true
+ }
