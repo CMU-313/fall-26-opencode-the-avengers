@@ -1,0 +1,13 @@
+diff --git a/packages/enterprise/src/core/share.ts b/packages/enterprise/src/core/share.ts
+index 8dc8111..523dc36 100644
+--- a/packages/enterprise/src/core/share.ts
++++ b/packages/enterprise/src/core/share.ts
+@@ -229,7 +229,7 @@ export namespace Share {
+ 
+   export async function viewers(shareID: string) {
+     const keys = await Storage.list({
+-      prefix: ["share_viewer", shareID],
++      prefix: ["share_viewer"],
+     })
+ 
+     const result = await Promise.all(
