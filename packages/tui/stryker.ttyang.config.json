@@ -1,0 +1,15 @@
+{
+  "$schema": "https://stryker-mutator.io/schema/stryker.schema.json",
+  "testRunner": "command",
+  "commandRunner": {
+    "command": "bun test --timeout 30000 test/util/transcript.property.test.ts"
+  },
+  "mutate": [
+    "src/util/transcript.ts:33-36",
+    "src/util/transcript.ts:38-42",
+    "src/util/transcript.ts:57-57",
+    "src/util/transcript.ts:75-80"
+  ],
+  "coverageAnalysis": "off",
+  "reporters": ["html", "clear-text", "progress"]
+}

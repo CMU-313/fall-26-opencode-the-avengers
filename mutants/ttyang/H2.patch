@@ -1,0 +1,10 @@
+diff --git a/packages/tui/src/util/transcript.ts b/packages/tui/src/util/transcript.ts
+--- a/packages/tui/src/util/transcript.ts
++++ b/packages/tui/src/util/transcript.ts
+@@ -38,5 +38,3 @@
+ export function getMessagesBeforeRevert<T extends { id: string }>(messages: T[], revertMessageID?: string) {
+-  if (!revertMessageID) return messages
+-  const index = messages.findIndex((message) => message.id === revertMessageID)
+-  return index === -1 ? messages : messages.slice(0, index)
++  return messages
+ }
