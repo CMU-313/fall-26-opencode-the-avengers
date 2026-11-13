@@ -1,0 +1,12 @@
+diff --git a/packages/tui/src/speech.ts b/packages/tui/src/speech.ts
+--- a/packages/tui/src/speech.ts
++++ b/packages/tui/src/speech.ts
+@@ -194,7 +194,7 @@
+       // List markers go before heading markers, so the number in "## 2. Setup" isn't taken for a list marker.
+       .replace(/^[ \t]*(?:[-*+]|\d+[.)])[ \t]+(?:\[[ xX]\][ \t]+)?(?=\S)/gm, "")
+       .replace(/^[ \t]*#{1,6}[ \t]+/gm, "")
+-      .replace(/(\*\*|__|~~)(.+?)\1/g, unwrapStrong)
++      .replace(/(\*\*|~~)(.+?)\1/g, unwrapStrong)
+       .replace(/(^|[^\w*])[*_]([^*_\s](?:[^*_\n]*[^*_\s])?)[*_](?![\w*])/g, "$1$2")
+       // oxlint-disable-next-line no-control-regex -- matches only the placeholders above; the text has no other NULs
+       .replace(/\u0000(\d+)\u0000/g, (_, index: string) => code[Number(index)])

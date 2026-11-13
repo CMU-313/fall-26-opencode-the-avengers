@@ -30,6 +30,17 @@ export type CopyCommandState =
   | { kind: "noop" }
   | { kind: "copy"; count?: number }
 
+export function getCopyWarning(requestedCount: number | undefined, availableCount: number) {
+  if (requestedCount === undefined || requestedCount <= availableCount) return
+  return `Only ${availableCount} message${availableCount === 1 ? "" : "s"} copied.`
+}
+
+export function getMessagesBeforeRevert<T extends { id: string }>(messages: T[], revertMessageID?: string) {
+  if (!revertMessageID) return messages
+  const index = messages.findIndex((message) => message.id === revertMessageID)
+  return index === -1 ? messages : messages.slice(0, index)
+}
+
 export function getCopyCommandState(input: string, messageCount: number): CopyCommandState {
   const match = input.trim().match(/^\/copy(?:\s+([\s\S]+))?$/)
   if (!match) return { kind: "none" }
@@ -89,6 +100,11 @@ export function formatResponse(
     .filter((text) => text.length > 0)
     .join("\n\n")
   return text ? `${text}\n` : ""
+}
+
+// A response is only worth saving when it has visible answer text; thinking, tool parts, and synthetic text don't count.
+export function hasResponseText(parts: Part[]): boolean {
+  return parts.some((part) => part.type === "text" && !part.synthetic && part.text.trim().length > 0)
 }
 
 // Resolves the save format from the extension, defaulting to Markdown when none is given.

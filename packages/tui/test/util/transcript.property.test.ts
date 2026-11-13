@@ -1,0 +1,205 @@
+import { expect, test } from "bun:test"
+import { array, assert, integer, property, string } from "fast-check"
+import {
+  formatTranscript,
+  getCopyCommandState,
+  getCopyWarning,
+  getMessagesBeforeRevert,
+  type MessageWithParts,
+} from "../../src/util/transcript"
+
+const session = {
+  id: "ses_property",
+  title: "Property test",
+  time: { created: 1, updated: 2 },
+}
+
+const options = { thinking: false, toolDetails: false, assistantMetadata: false }
+
+function makeMessages(texts: string[]): MessageWithParts[] {
+  return texts.map((text, index) => ({
+    info: {
+      id: `msg_${index}`,
+      sessionID: session.id,
+      role: "user",
+      agent: "build",
+      model: { providerID: "anthropic", modelID: "claude" },
+      time: { created: index },
+    },
+    parts: [
+      {
+        id: `part_${index}`,
+        sessionID: session.id,
+        messageID: `msg_${index}`,
+        type: "text",
+        text,
+      },
+    ],
+  }))
+}
+
+test("R1: copy x includes exactly the x most recent messages", () => {
+  assert(
+    property(
+      array(string({ maxLength: 30 }), { minLength: 2, maxLength: 20 }),
+      integer({ min: 1, max: 20 }),
+      (texts, requestedCount) => {
+        const contents = texts.map((text, index) => `message_${index}:${text}`)
+        const limit = ((requestedCount - 1) % contents.length) + 1
+        const transcript = formatTranscript(session, makeMessages(contents), options, limit)
+
+        contents.slice(-limit).forEach((text) => expect(transcript).toContain(text))
+        contents.slice(0, -limit).forEach((text) => expect(transcript).not.toContain(text))
+      },
+    ),
+    { numRuns: 100, seed: 42 },
+  )
+})
+
+test("R2: over-limit copy includes every available message and warns with the copied count", () => {
+  // R2: If x exceeds available messages, copy all available messages and warn with the actual count. 
+  // Kind: Invariant
+  const histories = array(string({ maxLength: 30 }), { minLength: 1, maxLength: 12 })
+  const overages = integer({ min: 1, max: 12 })
+
+  assert(
+    property(histories, overages, (texts, overage) => {
+      const contents = texts.map((text, index) => `message_${index}:${text}`)
+      const messages = makeMessages(contents)
+      const requestedCount = messages.length + overage
+      const transcript = formatTranscript(session, messages, options, requestedCount)
+
+      expect(getCopyWarning(requestedCount, messages.length)).toBe(
+        `Only ${messages.length} message${messages.length === 1 ? "" : "s"} copied.`,
+      )
+      expect(getCopyWarning(messages.length, messages.length)).toBeUndefined()
+      expect(getCopyWarning(messages.length - 1, messages.length)).toBeUndefined()
+      expect(getCopyWarning(undefined, messages.length)).toBeUndefined()
+      contents.forEach((text) => expect(transcript).toContain(text))
+    }),
+    { numRuns: 100, seed: 42 },
+  )
+})
+
+test("R3: adding then reverting a message restores the original copied transcript", () => {
+  // R3: Previously deleted messages are excluded from copied output. 
+  // Kind: Round-trip
+  const histories = array(string({ maxLength: 30 }), { minLength: 1, maxLength: 20 })
+
+  assert(
+    property(histories, string({ maxLength: 30 }), (texts, deletedText) => {
+      const history = makeMessages(texts.map((text, index) => `message_${index}:${text}`))
+      const beforeDelete = formatTranscript(session, history, options)
+      const withDeletedMessage = makeMessages([
+        ...texts.map((text, index) => `message_${index}:${text}`),
+        `deleted:${deletedText}`,
+      ])
+      const withoutRevertedMessages = getMessagesBeforeRevert(
+        withDeletedMessage.map((message) => message.info),
+        `msg_${texts.length}`,
+      )
+      const afterRevert = formatTranscript(
+        session,
+        withDeletedMessage.filter((message) =>
+          withoutRevertedMessages.some((info) => info.id === message.info.id),
+        ),
+        options,
+      )
+
+      expect(formatTranscript(session, withDeletedMessage, options)).not.toBe(beforeDelete)
+      expect(afterRevert).toBe(beforeDelete)
+      expect(getMessagesBeforeRevert(withDeletedMessage.map((message) => message.info))).toEqual(
+        withDeletedMessage.map((message) => message.info),
+      )
+      expect(
+        getMessagesBeforeRevert(
+          withDeletedMessage.map((message) => message.info),
+          "missing-message",
+        ),
+      ).toEqual(withDeletedMessage.map((message) => message.info))
+    }),
+    { numRuns: 100, seed: 42 },
+  )
+})
+
+test("R4: changing any positive count to zero makes /copy invalid", () => {
+  // R4: An invalid count such as zero blocks copying. 
+  // Kind: Metamorphic
+  assert(
+    property(array(integer({ min: 1, max: Number.MAX_SAFE_INTEGER }), { minLength: 1, maxLength: 20 }), (generated) =>
+      [1, ...generated].every((count) => {
+        expect(getCopyCommandState(`/copy ${count}`, 1)).toEqual({ kind: "copy", count })
+        expect(getCopyCommandState(`/copy ${count - count}`, 1)).toEqual({ kind: "invalid" })
+        return true
+      }),
+    ),
+    { numRuns: 100, seed: 42 },
+  )
+})
+
+test("R4: nonnumeric copy counts are invalid", () => {
+  assert(
+    property(string({ minLength: 1, maxLength: 20 }), (argument) => {
+      expect(getCopyCommandState(`/copy ${argument}x`, 1)).toEqual({ kind: "invalid" })
+    }),
+    { numRuns: 100, seed: 42 },
+  )
+})
+
+test("R4: zero boundary validation accepts positive count n and rejects zero count", () => {
+  assert(
+    property(integer({ min: 1, max: Number.MAX_SAFE_INTEGER }), (n) => {
+      expect(getCopyCommandState(`/copy ${n}`, 1)).toEqual({ kind: "copy", count: n })
+      expect(getCopyCommandState(`/copy ${n.toString().replace(String(n), "0")}`, 1)).toEqual({ kind: "invalid" })
+    }),
+    { numRuns: 100, seed: 42 },
+  )
+})
+
+test("R4: numeric formats other than digit-only counts are invalid", () => {
+  assert(
+    property(integer({ min: 1, max: 10_000 }), (count) => {
+      for (const argument of [`+${count}`, `${count}.0`, `${count}e0`]) {
+        expect(getCopyCommandState(`/copy ${argument}`, 1)).toEqual({ kind: "invalid" })
+      }
+    }),
+    { numRuns: 100, seed: 42 },
+  )
+})
+
+test("R5: formatted transcripts agree with chronological message order", () => {
+  // R5: Multiple messages remain in oldest-to-newest order. 
+  // Kind: Oracle
+  assert(
+    property(array(integer({ min: 0, max: 100 }), { minLength: 1, maxLength: 20 }), (timestamps) => {
+      const messages = timestamps.map((created, index) => ({
+        info: {
+          id: `msg_${String(index).padStart(2, "0")}`,
+          sessionID: session.id,
+          role: "user" as const,
+          agent: "build",
+          model: { providerID: "anthropic", modelID: "claude" },
+          time: { created },
+        },
+        parts: [
+          {
+            id: `part_${index}`,
+            sessionID: session.id,
+            messageID: `msg_${index}`,
+            type: "text" as const,
+            text: `|message_${index}|`,
+          },
+        ],
+      }))
+      const expected = messages
+        .toSorted((a, b) => a.info.time.created - b.info.time.created || a.info.id.localeCompare(b.info.id))
+        .map((message) => message.parts[0].text)
+      const transcript = formatTranscript(session, messages, options)
+      const positions = expected.map((text) => transcript.indexOf(text))
+
+      expect(positions.every((position) => position >= 0)).toBe(true)
+      expect(positions).toEqual(positions.toSorted((a, b) => a - b))
+    }),
+    { numRuns: 100, seed: 42 },
+  )
+})

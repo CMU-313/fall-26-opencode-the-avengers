@@ -1,0 +1,9 @@
+diff --git a/packages/tui/src/util/transcript.ts b/packages/tui/src/util/transcript.ts
+--- a/packages/tui/src/util/transcript.ts
++++ b/packages/tui/src/util/transcript.ts
+@@ -56,4 +56,4 @@
+   const count = Number(argument)
+-  if (!/^\d+$/.test(argument) || !Number.isSafeInteger(count) || count < 1) return { kind: "invalid" }
++  if (/^\d+$/.test(argument) && (!Number.isSafeInteger(count) || count < 1)) return { kind: "invalid" }
+ 
+   return { kind: "copy", count }

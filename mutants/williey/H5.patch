@@ -1,0 +1,13 @@
+diff --git a/packages/tui/src/routes/session/index.tsx b/packages/tui/src/routes/session/index.tsx
+index 16d8dcf..84b3493 100644
+--- a/packages/tui/src/routes/session/index.tsx
++++ b/packages/tui/src/routes/session/index.tsx
+@@ -1014,7 +1014,7 @@ export function Session() {
+       },
+       run: () => {
+       dialog.clear()
+-        const last = messagesBeforeRevert().findLast((message) => message.role === "assistant")
++        const last = messagesBeforeRevert().find((message) => message.role === "assistant")
+         const text = messagesBeforeRevert()
+           .filter((message) => message.role === "assistant" && message.parentID === last?.parentID)
+           .flatMap((message) => sync.data.part[message.id] ?? [])
