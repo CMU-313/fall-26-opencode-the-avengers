@@ -1,0 +1,18 @@
+{
+  "testRunner": "command",
+  "commandRunner": {
+    "command": "bun test test/save-response/save-response.property.test.ts test/save-response/save-response-dialog.property.test.tsx"
+  },
+  "mutate": [
+    "src/util/transcript.ts:79-97",
+    "src/util/transcript.ts:111-118",
+    "src/util/transcript.ts:122-177",
+    "src/routes/session/index.tsx:362-386",
+    "src/ui/dialog-export-options.tsx:42-49",
+    "src/ui/dialog-export-options.tsx:195-234"
+  ],
+  "coverageAnalysis": "off",
+  "timeoutMS": 60000,
+  "concurrency": 2,
+  "reporters": ["html", "clear-text", "progress"]
+}

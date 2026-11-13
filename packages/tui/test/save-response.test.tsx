@@ -208,6 +208,23 @@ describe("save last assistant response", () => {
     }
   })
 
+  test("a completed save does not restore its filename when the dialog reopens", async () => {
+    await using tmp = await tmpdir()
+    const filepath = path.join(tmp.path, "answer.txt")
+    const app = await startApp([user, assistant])
+    try {
+      await app.screen("key-value")
+      app.save()
+      await app.enterFilename(filepath)
+      await waitForFile(filepath)
+      await app.screen("Response saved to")
+      app.save()
+      expect(await app.screen("response-")).toContain("Save Response")
+    } finally {
+      await app.stop()
+    }
+  })
+
   test("rejects unsupported file extensions without writing", async () => {
     await using tmp = await tmpdir()
     const filepath = path.join(tmp.path, "answer.pdf")

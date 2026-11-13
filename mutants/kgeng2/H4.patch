@@ -1,0 +1,13 @@
+diff --git a/packages/tui/src/util/transcript.ts b/packages/tui/src/util/transcript.ts
+index 49049f5..e3997a3 100644
+--- a/packages/tui/src/util/transcript.ts
++++ b/packages/tui/src/util/transcript.ts
+@@ -93,7 +93,7 @@ export function formatResponse(
+ 
+ // A response is only worth saving when it has visible answer text; thinking, tool parts, and synthetic text don't count.
+ export function hasResponseText(parts: Part[]): boolean {
+-  return parts.some((part) => part.type === "text" && !part.synthetic && part.text.trim().length > 0)
++  return parts.some((part) => part.type === "text" && part.text.trim().length > 0)
+ }
+ 
+ // Resolves the save format from the extension, defaulting to Markdown when none is given.

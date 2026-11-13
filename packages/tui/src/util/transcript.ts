@@ -102,6 +102,11 @@ export function formatResponse(
   return text ? `${text}\n` : ""
 }
 
+// A response is only worth saving when it has visible answer text; thinking, tool parts, and synthetic text don't count.
+export function hasResponseText(parts: Part[]): boolean {
+  return parts.some((part) => part.type === "text" && !part.synthetic && part.text.trim().length > 0)
+}
+
 // Resolves the save format from the extension, defaulting to Markdown when none is given.
 export function parseResponseFilename(input: string): { filename: string; format: ResponseFormat } | undefined {
   const filename = input.trim()

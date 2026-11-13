@@ -1,0 +1,13 @@
+diff --git a/packages/tui/src/routes/session/dialog-message.tsx b/packages/tui/src/routes/session/dialog-message.tsx
+index 1d1a224..b0183fb 100644
+--- a/packages/tui/src/routes/session/dialog-message.tsx
++++ b/packages/tui/src/routes/session/dialog-message.tsx
+@@ -114,7 +114,7 @@ export function DialogMessage(props: {
+           value: "message.save",
+           description: "response as .md or .txt",
+           onSelect: () => {
+-            const msg = message()
++            const msg = sync.data.message[props.sessionID]?.findLast((x) => x.role === "assistant")
+             if (msg?.role !== "assistant") return
+             props.onSave?.(msg)
+           },

@@ -6,6 +6,14 @@ import { onMount, Show } from "solid-js"
 import { useTuiConfig } from "../config"
 import { useBindings } from "../keymap"
 
+export type ExportOptions = {
+  filename: string
+  thinking: boolean
+  toolDetails: boolean
+  assistantMetadata: boolean
+  openWithoutSaving: boolean
+}
+
 export type DialogExportOptionsProps = {
   title?: string
   defaultFilename: string
@@ -13,14 +21,10 @@ export type DialogExportOptionsProps = {
   defaultToolDetails: boolean
   defaultAssistantMetadata: boolean
   defaultOpenWithoutSaving: boolean
-  onConfirm?: (options: {
-    filename: string
-    thinking: boolean
-    toolDetails: boolean
-    assistantMetadata: boolean
-    openWithoutSaving: boolean
-  }) => void
+  onConfirm?: (options: ExportOptions) => void
   onCancel?: () => void
+  // Hands the caller a reader for the current values, so they can be captured when the dialog is dismissed.
+  bindValues?: (read: () => ExportOptions) => void
 }
 
 export function DialogExportOptions(props: DialogExportOptionsProps) {
@@ -35,6 +39,14 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
     openWithoutSaving: props.defaultOpenWithoutSaving,
     active: "filename" as "filename" | "thinking" | "toolDetails" | "assistantMetadata" | "openWithoutSaving",
   })
+  const values = (): ExportOptions => ({
+    filename: textarea.plainText,
+    thinking: store.thinking,
+    toolDetails: store.toolDetails,
+    assistantMetadata: store.assistantMetadata,
+    openWithoutSaving: store.openWithoutSaving,
+  })
+  props.bindValues?.(values)
 
   useBindings(() => ({
     bindings: [
@@ -99,15 +111,7 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
           <text fg={theme.text}>Filename:</text>
         </box>
         <textarea
-          onSubmit={() => {
-            props.onConfirm?.({
-              filename: textarea.plainText,
-              thinking: store.thinking,
-              toolDetails: store.toolDetails,
-              assistantMetadata: store.assistantMetadata,
-              openWithoutSaving: store.openWithoutSaving,
-            })
-          }}
+          onSubmit={() => props.onConfirm?.(values())}
           height={3}
           ref={(val: TextareaRenderable) => {
             textarea = val
@@ -196,14 +200,11 @@ DialogExportOptions.show = (
   defaultAssistantMetadata: boolean,
   defaultOpenWithoutSaving: boolean,
   title?: string,
+  onDismiss?: (values: ExportOptions) => void,
 ) => {
-  return new Promise<{
-    filename: string
-    thinking: boolean
-    toolDetails: boolean
-    assistantMetadata: boolean
-    openWithoutSaving: boolean
-  } | null>((resolve) => {
+  return new Promise<ExportOptions | null>((resolve) => {
+    let read: (() => ExportOptions) | undefined
+    let confirmed = false
     dialog.replace(
       () => (
         <DialogExportOptions
@@ -213,11 +214,21 @@ DialogExportOptions.show = (
           defaultToolDetails={defaultToolDetails}
           defaultAssistantMetadata={defaultAssistantMetadata}
           defaultOpenWithoutSaving={defaultOpenWithoutSaving}
-          onConfirm={(options) => resolve(options)}
+          onConfirm={(options) => {
+            confirmed = true
+            resolve(options)
+          }}
           onCancel={() => resolve(null)}
+          bindValues={(values) => {
+            read = values
+          }}
         />
       ),
-      () => resolve(null),
+      // Also fires when a confirmed dialog is cleared afterwards, which isn't a dismissal.
+      () => {
+        if (!confirmed && read) onDismiss?.(read())
+        resolve(null)
+      },
     )
   })
 }
