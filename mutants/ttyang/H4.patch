@@ -1,0 +1,10 @@
+diff --git a/packages/tui/src/util/transcript.ts b/packages/tui/src/util/transcript.ts
+--- a/packages/tui/src/util/transcript.ts
++++ b/packages/tui/src/util/transcript.ts
+@@ -79,4 +79,5 @@
+-  for (const msg of limit === undefined ? ordered : ordered.slice(-limit)) {
++  const copied = limit === undefined ? ordered : ordered.slice(-limit)
++  for (const msg of copied.toReversed()) {
+     transcript += formatMessage(msg.info, msg.parts, options, providers)
+     transcript += `---\n\n`
+   }

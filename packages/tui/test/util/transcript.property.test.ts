@@ -38,6 +38,24 @@ function makeMessages(texts: string[]): MessageWithParts[] {
   }))
 }
 
+test("R1: copy x includes exactly the x most recent messages", () => {
+  assert(
+    property(
+      array(string({ maxLength: 30 }), { minLength: 2, maxLength: 20 }),
+      integer({ min: 1, max: 20 }),
+      (texts, requestedCount) => {
+        const contents = texts.map((text, index) => `message_${index}:${text}`)
+        const limit = ((requestedCount - 1) % contents.length) + 1
+        const transcript = formatTranscript(session, makeMessages(contents), options, limit)
+
+        contents.slice(-limit).forEach((text) => expect(transcript).toContain(text))
+        contents.slice(0, -limit).forEach((text) => expect(transcript).not.toContain(text))
+      },
+    ),
+    { numRuns: 100, seed: 42 },
+  )
+})
+
 test("R2: over-limit copy includes every available message and warns with the copied count", () => {
   // R2: If x exceeds available messages, copy all available messages and warn with the actual count. 
   // Kind: Invariant
@@ -54,9 +72,12 @@ test("R2: over-limit copy includes every available message and warns with the co
       expect(getCopyWarning(requestedCount, messages.length)).toBe(
         `Only ${messages.length} message${messages.length === 1 ? "" : "s"} copied.`,
       )
+      expect(getCopyWarning(messages.length, messages.length)).toBeUndefined()
+      expect(getCopyWarning(messages.length - 1, messages.length)).toBeUndefined()
+      expect(getCopyWarning(undefined, messages.length)).toBeUndefined()
       contents.forEach((text) => expect(transcript).toContain(text))
     }),
-    { numRuns: 100 },
+    { numRuns: 100, seed: 42 },
   )
 })
 
@@ -87,8 +108,17 @@ test("R3: adding then reverting a message restores the original copied transcrip
 
       expect(formatTranscript(session, withDeletedMessage, options)).not.toBe(beforeDelete)
       expect(afterRevert).toBe(beforeDelete)
+      expect(getMessagesBeforeRevert(withDeletedMessage.map((message) => message.info))).toEqual(
+        withDeletedMessage.map((message) => message.info),
+      )
+      expect(
+        getMessagesBeforeRevert(
+          withDeletedMessage.map((message) => message.info),
+          "missing-message",
+        ),
+      ).toEqual(withDeletedMessage.map((message) => message.info))
     }),
-    { numRuns: 100 },
+    { numRuns: 100, seed: 42 },
   )
 })
 
@@ -96,11 +126,44 @@ test("R4: changing any positive count to zero makes /copy invalid", () => {
   // R4: An invalid count such as zero blocks copying. 
   // Kind: Metamorphic
   assert(
-    property(integer({ min: 1, max: Number.MAX_SAFE_INTEGER }), (count) => {
-      expect(getCopyCommandState(`/copy ${count}`, 1)).toEqual({ kind: "copy", count })
-      expect(getCopyCommandState(`/copy ${count - count}`, 1)).toEqual({ kind: "invalid" })
+    property(array(integer({ min: 1, max: Number.MAX_SAFE_INTEGER }), { minLength: 1, maxLength: 20 }), (generated) =>
+      [1, ...generated].every((count) => {
+        expect(getCopyCommandState(`/copy ${count}`, 1)).toEqual({ kind: "copy", count })
+        expect(getCopyCommandState(`/copy ${count - count}`, 1)).toEqual({ kind: "invalid" })
+        return true
+      }),
+    ),
+    { numRuns: 100, seed: 42 },
+  )
+})
+
+test("R4: nonnumeric copy counts are invalid", () => {
+  assert(
+    property(string({ minLength: 1, maxLength: 20 }), (argument) => {
+      expect(getCopyCommandState(`/copy ${argument}x`, 1)).toEqual({ kind: "invalid" })
     }),
-    { numRuns: 100 },
+    { numRuns: 100, seed: 42 },
+  )
+})
+
+test("R4: zero boundary validation accepts positive count n and rejects zero count", () => {
+  assert(
+    property(integer({ min: 1, max: Number.MAX_SAFE_INTEGER }), (n) => {
+      expect(getCopyCommandState(`/copy ${n}`, 1)).toEqual({ kind: "copy", count: n })
+      expect(getCopyCommandState(`/copy ${n.toString().replace(String(n), "0")}`, 1)).toEqual({ kind: "invalid" })
+    }),
+    { numRuns: 100, seed: 42 },
+  )
+})
+
+test("R4: numeric formats other than digit-only counts are invalid", () => {
+  assert(
+    property(integer({ min: 1, max: 10_000 }), (count) => {
+      for (const argument of [`+${count}`, `${count}.0`, `${count}e0`]) {
+        expect(getCopyCommandState(`/copy ${argument}`, 1)).toEqual({ kind: "invalid" })
+      }
+    }),
+    { numRuns: 100, seed: 42 },
   )
 })
 
@@ -137,6 +200,6 @@ test("R5: formatted transcripts agree with chronological message order", () => {
       expect(positions.every((position) => position >= 0)).toBe(true)
       expect(positions).toEqual(positions.toSorted((a, b) => a - b))
     }),
-    { numRuns: 100 },
+    { numRuns: 100, seed: 42 },
   )
 })
