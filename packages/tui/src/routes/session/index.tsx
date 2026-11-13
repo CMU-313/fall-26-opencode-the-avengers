@@ -215,12 +215,7 @@ export function Session() {
       .toSorted((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
   })
   const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
-  const messagesBeforeRevert = () => {
-    const messageID = session()?.revert?.messageID
-    if (!messageID) return messages()
-    const index = messages().findIndex((message) => message.id === messageID)
-    return index === -1 ? messages() : messages().slice(0, index)
-  }
+  const messagesBeforeRevert = () => getMessagesBeforeRevert(messages(), session()?.revert?.messageID)
   const foregroundTasks = createMemo(() =>
     sync.data.capabilities.experimentalBackgroundSubagents
       ? messages().flatMap((message) =>
@@ -1040,7 +1035,9 @@ export function Session() {
         try {
           const sessionData = session()
           if (!sessionData) return
-          const sessionMessages = messages()
+          const sessionMessages = messagesBeforeRevert()
+          const requestedCount = typeof ctx.payload === "number" ? ctx.payload : undefined
+          const warning = getCopyWarning(requestedCount, sessionMessages.length)
           const transcript = formatTranscript(
             sessionData,
             sessionMessages.map((msg) => ({ info: msg, parts: sync.data.part[msg.id] ?? [] })),
@@ -1050,10 +1047,14 @@ export function Session() {
               assistantMetadata: showAssistantMetadata(),
               providers: sync.data.provider,
             },
-            typeof ctx.payload === "number" ? ctx.payload : undefined,
+            requestedCount,
           )
           await clipboard.write?.(transcript)
-          toast.show({ message: "Session transcript copied to clipboard!", variant: "success" })
+          toast.show(
+            warning
+              ? { message: warning, variant: "warning" }
+              : { message: "Session transcript copied to clipboard!", variant: "success" },
+          )
         } catch {
           toast.show({ message: "Failed to copy session transcript", variant: "error" })
         }
