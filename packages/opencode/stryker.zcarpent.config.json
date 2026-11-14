@@ -1,0 +1,14 @@
+{
+  "testRunner": "command",
+  "commandRunner": {
+    "command": "cd packages/opencode && bun test test/share/share.property.test.ts"
+  },
+  "mutate": [
+    "packages/enterprise/src/core/share.ts:221-241"
+  ],
+  "coverageAnalysis": "off",
+  "reporters": ["html", "clear-text", "progress"],
+  "ignorePatterns": [
+    "packages/console/**"
+  ]
+}

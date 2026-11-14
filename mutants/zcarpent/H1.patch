@@ -1,0 +1,13 @@
+diff --git a/packages/enterprise/src/core/share.ts b/packages/enterprise/src/core/share.ts
+index 8dc8111..b5a349d 100644
+--- a/packages/enterprise/src/core/share.ts
++++ b/packages/enterprise/src/core/share.ts
+@@ -220,7 +220,7 @@ export namespace Share {
+   )
+ 
+   export async function addViewer(shareID: string, viewer: Viewer) {
+-    await Storage.write(["share_viewer", shareID, viewer.id], viewer)
++    await Storage.write(["share_viewer", shareID, viewer.name], viewer)
+   }
+ 
+   export async function removeViewer(shareID: string, viewerID: string) {

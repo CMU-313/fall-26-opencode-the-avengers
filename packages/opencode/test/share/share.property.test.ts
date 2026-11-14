@@ -1,0 +1,187 @@
+import { describe, expect, test } from "bun:test"
+import fc from 'fast-check';
+import { Share } from "../../../enterprise/src/core/share";
+
+fc.configureGlobal({ seed: 42 })
+process.env.OPENCODE_STORAGE_ADAPTER = "memory"
+
+// Constructor for active viewers 
+const viewers = fc.uniqueArray(fc.uuid(), {minLength: 1, maxLength: 15,}).map((ids) => ids.map((id) => ({id, name: "Viewer",})));
+
+describe('shared conversation viewer tracking', () => {
+    // (R1) Pattern: invariant. Each new unique viewer increases the count by one.
+    test("increments active viewer count for each unique viewer", async () => {
+        await fc.assert(
+            fc.asyncProperty(viewers, async (generatedViewers: Share.Viewer[]) => {
+                const shareID = crypto.randomUUID()
+                try {
+                    for (const viewer of generatedViewers) {
+                        const before = (await Share.viewers(shareID)).length
+                        await Share.addViewer(shareID, viewer)
+                        const after = (await Share.viewers(shareID)).length
+                        expect(after).toBe(before + 1)
+                    }
+                } finally {
+                    for (const viewer of generatedViewers) {
+                        await Share.removeViewer(shareID, viewer.id)
+                    }
+                }
+            }),
+        )
+    });
+
+    // (R2) Pattern: invariant. Removing an active viewer decreases the count by one.
+    test("decrements active viewer count when a viewer leaves", async () => {
+        await fc.assert(
+            fc.asyncProperty(viewers, async (generatedViewers: Share.Viewer[]) => {
+                const shareID = crypto.randomUUID()
+                try {
+                    for (const viewer of generatedViewers) {
+                        await Share.addViewer(shareID, viewer)
+                    }
+
+                    for (const viewer of generatedViewers) {
+                        const before = (await Share.viewers(shareID)).length
+                        await Share.removeViewer(shareID, viewer.id)
+                        const after = (await Share.viewers(shareID)).length
+
+                        expect(after).toBe(before - 1)
+                    }
+                } finally {
+                    for (const viewer of generatedViewers) {
+                        await Share.removeViewer(shareID, viewer.id)
+                    }
+                }
+            }),
+        )
+    });
+
+    // (R3) Pattern: round-trip. Adding and then removing viewers should restore the original count.
+    test("restores viewer count after opening and closing shared sessions", async () => {
+        await fc.assert(
+            fc.asyncProperty(viewers, async (generatedViewers: Share.Viewer[]) => {
+                const shareID = crypto.randomUUID()
+
+                try {
+                    const before = (await Share.viewers(shareID)).length
+
+                    // Open shared sessions
+                    for (const viewer of generatedViewers) {
+                        await Share.addViewer(shareID, viewer)
+                    }
+
+                    // Close shared sessions
+                    for (const viewer of generatedViewers) {
+                        await Share.removeViewer(shareID, viewer.id)
+                    }
+
+                    const after = (await Share.viewers(shareID)).length
+
+                    expect(after).toBe(before)
+                } finally {
+                    for (const viewer of generatedViewers) {
+                        await Share.removeViewer(shareID, viewer.id)
+                    }
+                }
+            }),
+        )
+    });
+
+    // (R4) Pattern: metamorphic. Adding viewers to one conversation should not affect another.
+    test("tracks adding the same viewers to two conversations", async () => {
+        await fc.assert(
+            fc.asyncProperty(viewers, async (generatedViewers: Share.Viewer[]) => {
+                const shareID1 = crypto.randomUUID()
+                const shareID2 = crypto.randomUUID()
+
+                try {
+                    // Add viewers to the first conversation
+                    for (const viewer of generatedViewers) {
+                        await Share.addViewer(shareID1, viewer)
+                    }
+
+                    const before = (await Share.viewers(shareID1)).length
+
+                    // Add the same viewers to the second conversation
+                    for (const viewer of generatedViewers) {
+                        await Share.addViewer(shareID2, viewer)
+                    }
+
+                    const after = (await Share.viewers(shareID1)).length
+
+                    // The first conversation's viewer count should remain unchanged
+                    expect(after).toBe(before)
+
+                    // Both conversations should track their own viewers
+                    expect(await Share.viewers(shareID2)).toHaveLength(generatedViewers.length)
+
+                } finally {
+                    for (const viewer of generatedViewers) {
+                        await Share.removeViewer(shareID1, viewer.id)
+                        await Share.removeViewer(shareID2, viewer.id)
+                    }
+                }
+            }),
+        )
+    });
+
+    // (R4 - opencode) Adding viewers to one conversation does not change another's count.
+    test("(OPENCODE) tracks active viewers of different conversations independently", async () => {
+        await fc.assert(
+            fc.asyncProperty(viewers, viewers, async (existingViewers, addedViewers) => {
+                const shareID1 = `${crypto.randomUUID()}-1`
+                const shareID2 = `${crypto.randomUUID()}-2`
+
+                try {
+                    for (const viewer of existingViewers) {
+                        await Share.addViewer(shareID1, viewer)
+                    }
+
+                    const before = (await Share.viewers(shareID1)).length
+
+                    for (const viewer of addedViewers) {
+                        await Share.addViewer(shareID2, viewer)
+                        expect((await Share.viewers(shareID1)).length).toBe(before)
+                    }
+                } finally {
+                    for (const viewer of existingViewers) {
+                        await Share.removeViewer(shareID1, viewer.id)
+                    }
+                    for (const viewer of addedViewers) {
+                        await Share.removeViewer(shareID2, viewer.id)
+                    }
+                }
+            }),
+        )
+    });
+
+    // (R5 - strengthened) Removing a viewer from one conversation does not change the count of another.
+    test("(STRENGTHENED) removing a viewer from one conversation does not affect another ", async () => {
+        await fc.assert(
+            fc.asyncProperty(viewers, async (generated) => {
+                const shareA = crypto.randomUUID()
+                const shareB = crypto.randomUUID()
+
+                try {
+                    for (const viewer of generated) {
+                        await Share.addViewer(shareA, viewer)
+                        await Share.addViewer(shareB, viewer)
+                    }
+
+                    const removed = generated[0]
+                    await Share.removeViewer(shareA, removed.id)
+
+                    expect((await Share.viewers(shareA)).length).toBe(generated.length - 1)
+                    expect((await Share.viewers(shareB)).length).toBe(generated.length)
+                    expect((await Share.viewers(shareB)).some((viewer) => viewer.id === removed.id)).toBe(true)
+                } finally {
+                    for (const viewer of generated) {
+                        await Share.removeViewer(shareA, viewer.id)
+                        await Share.removeViewer(shareB, viewer.id)
+                    }
+                }
+            }),
+        )
+    });
+
+});
